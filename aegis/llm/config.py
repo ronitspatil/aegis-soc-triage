@@ -182,6 +182,12 @@ class LLMSettings(BaseSettings):
     # until this is turned off. Shadow mode for containment.
     action_dry_run: bool = True
 
+    # --- Threat hunting ---
+    hunter_enabled: bool = False
+    hunt_max_tool_calls: int = Field(default=12, gt=0)
+    # A hunt that floods the queue is worse than one that finds nothing.
+    hunt_max_findings: int = Field(default=5, gt=0)
+
     # --- Historical log search (investigation agent) ---
     log_backend: LogBackend = LogBackend.MOCK
     # Splunk only searches a role's default indexes unless told otherwise, so a

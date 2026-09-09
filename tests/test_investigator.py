@@ -74,6 +74,10 @@ def fake_llm(monkeypatch):
     def install(responses: list[Any]) -> FakeLLM:
         llm = FakeLLM(responses)
         monkeypatch.setattr("aegis.nodes.investigator.get_llm", lambda role: llm)
+        # The report path goes through the shared reporter, which binds a larger
+        # output ceiling; stub it too or the real one is called.
+        monkeypatch.setattr("aegis.nodes.investigator.get_report_llm",
+                            lambda schema: llm)
         return llm
     return install
 
@@ -88,7 +92,8 @@ def test_no_write_capable_tool_is_reachable():
                  "delete", "quarantine", "execute", "run_query", "search_splunk"}
     assert not (names & forbidden)
     assert names == {"get_host_timeline", "get_user_auth_history",
-                     "find_indicator", "count_rule_firings"}
+                     "find_indicator", "count_rule_firings", "get_asset_context",
+                     "list_known_assets", "list_active_rules"}
 
 
 def test_no_tool_accepts_a_raw_query():

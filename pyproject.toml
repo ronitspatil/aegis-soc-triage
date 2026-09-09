@@ -37,6 +37,13 @@ server = [
     "slack_sdk>=3.33",
     "mcp>=2.2",
 ]
+# External investigation tools over MCP. Kept out of `server` on purpose:
+# langchain-mcp-adapters requires mcp<2, while the MCP server this project
+# exposes uses the 2.x API. Installing both in one environment does not work.
+mcp-client = [
+    "langchain-mcp-adapters>=0.3.2",
+    "mcp<2",
+]
 dev = [
     "pytest>=8.3",
     "ruff>=0.7",
@@ -47,6 +54,7 @@ dev = [
 aegis-triage = "aegis.triage:main"
 aegis-simulate = "aegis.simulation.__main__:main"
 aegis-slack = "aegis.notify.slack_handler:main"
+aegis-hunt = "aegis.hunt_cli:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["aegis"]

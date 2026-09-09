@@ -135,6 +135,28 @@ class SplunkLogSearch:
         spl = f'search {self._scope} "{ioc}" {_SPATH} | head {MAX_ROWS}'
         return [self._to_event(r) for r in self._rows(spl, f"-{int(hours)}h")]
 
+    def list_active_rules(self, days: int = 7) -> list[RuleStats]:
+        spl = (
+            f"search {self._scope} {_SPATH} "
+            "| eval _r=coalesce(rule, search_name, rule_name) "
+            "| where isnotnull(_r) "
+            "| eval _h=coalesce(json_hostname, json_host, hostname, host) "
+            "| stats count as total, dc(_h) as hosts, dc(user) as users by _r "
+            "| sort - total | head 25"
+        )
+        stats: list[RuleStats] = []
+        for row in self._rows(spl, f"-{int(days)}d"):
+            name = _pick(row, "_r")
+            if not name:
+                continue
+            stats.append(RuleStats(
+                rule_name=name, days=days,
+                total_firings=int(row.get("total") or 0),
+                distinct_hosts=int(row.get("hosts") or 0),
+                distinct_users=int(row.get("users") or 0),
+            ))
+        return stats
+
     def count_rule_firings(self, rule_name: str, days: int = 7) -> RuleStats:
         rule = _clean(rule_name)
         spl = (

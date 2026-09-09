@@ -141,6 +141,9 @@ class MockLogSearch:
         cutoff = _NOW - timedelta(hours=hours)
         return [e for e in _INDICATORS.get(indicator, []) if e.timestamp >= cutoff]
 
+    def list_active_rules(self, days: int = 7) -> list[RuleStats]:
+        return sorted(_RULE_STATS.values(), key=lambda r: -r.total_firings)
+
     def count_rule_firings(self, rule_name: str, days: int = 7) -> RuleStats:
         hit = _RULE_STATS.get(rule_name.strip().lower())
         if hit is None:

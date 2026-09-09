@@ -118,6 +118,16 @@ def load_mcp_tools() -> tuple[BaseTool, ...]:
 
     try:
         tools = _load_raw_tools(config)
+    except ImportError as exc:
+        # Enabled but unusable is a configuration error, not a quiet fallback.
+        # langchain-mcp-adapters requires mcp<2, while the MCP server in this
+        # project uses the 2.x API, so the two cannot be installed together.
+        logger.error(
+            "MCP_ENABLED is set but the client could not be imported (%s). "
+            "Install the mcp-client extra in a separate environment, or drop "
+            "MCP_ENABLED. Continuing with built-in tools only.", exc,
+        )
+        return ()
     except Exception as exc:  # noqa: BLE001 - external process, many failure modes
         logger.warning("MCP tools unavailable, continuing without them: %s", exc)
         return ()

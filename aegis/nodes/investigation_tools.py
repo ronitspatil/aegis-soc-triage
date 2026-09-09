@@ -113,11 +113,82 @@ def count_rule_firings(rule_name: str, days: int = 7) -> str:
     )
 
 
+@tool
+def get_asset_context(hostname: str) -> str:
+    """What a host is: its criticality, type, environment and owner.
+
+    Use to judge blast radius. The same activity on a lab VM and a domain
+    controller warrant different urgency.
+    """
+    from aegis.tools.assets import lookup_asset
+
+    asset = lookup_asset(hostname)
+    if not asset.in_inventory:
+        return (
+            f"{hostname} is not in the asset inventory. Its criticality and owner "
+            "are unknown, which is a gap in inventory rather than evidence the "
+            "host is unimportant."
+        )
+    tags = f" Tags: {', '.join(asset.tags)}." if asset.tags else ""
+    return (
+        f"{hostname} is a {asset.criticality.value} {asset.asset_type} in "
+        f"{asset.environment}, owned by {asset.owner or 'unknown'} "
+        f"({asset.business_unit or 'unknown business unit'}).{tags}"
+    )
+
+
+@tool
+def list_known_assets(minimum_criticality: str = "") -> str:
+    """The hosts in the asset inventory, most critical first.
+
+    Use when you need to know what exists rather than guessing hostnames.
+    Pass a level such as "high" to narrow the list.
+    """
+    from aegis.tools.assets import Criticality, list_assets
+
+    level = None
+    if minimum_criticality:
+        try:
+            level = Criticality(minimum_criticality.strip().lower())
+        except ValueError:
+            return (f"'{minimum_criticality}' is not a criticality level. "
+                    f"Use one of: {', '.join(c.value for c in Criticality)}.")
+
+    assets = list_assets(level)
+    if not assets:
+        return "No assets in inventory match that criticality."
+    lines = [f"{len(assets)} asset(s) in inventory:"]
+    lines += [f"- {a.hostname}: {a.criticality.value} {a.asset_type} "
+              f"({a.environment})" for a in assets]
+    return "\n".join(lines)
+
+
+@tool
+def list_active_rules(days: int = 7) -> str:
+    """Detection rules that fired recently, noisiest first.
+
+    Use to find which rules exist rather than guessing their names.
+    """
+    from aegis.tools.logsearch import resolve_log_backend
+
+    stats = resolve_log_backend().list_active_rules(days)
+    if not stats:
+        return f"No detection rules recorded any firings in the last {days} days."
+    lines = [f"{len(stats)} rule(s) fired in the last {days} days:"]
+    lines += [f"- {r.rule_name}: {r.total_firings} firings "
+              f"({r.firings_per_day}/day) across {r.distinct_hosts} host(s)"
+              for r in stats]
+    return "\n".join(lines)
+
+
 INVESTIGATION_TOOLS = [
     get_host_timeline,
     get_user_auth_history,
     find_indicator,
     count_rule_firings,
+    get_asset_context,
+    list_known_assets,
+    list_active_rules,
 ]
 
 

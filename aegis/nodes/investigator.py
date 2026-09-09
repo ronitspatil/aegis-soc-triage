@@ -17,7 +17,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_core.runnables import RunnableConfig
 
 from aegis.llm.config import ModelRole, get_settings
-from aegis.llm.providers import get_llm
+from aegis.llm.providers import get_llm, get_report_llm
 from aegis.nodes.investigation_tools import all_investigation_tools
 from aegis.schemas.investigation import InvestigationReport
 from aegis.schemas.state import SOCAgentState
@@ -166,11 +166,7 @@ def investigation_report_node(
         }
 
     try:
-        llm = (
-            get_llm(ModelRole.REASONER)
-            .bind(max_tokens=get_settings().investigation_report_max_tokens)
-            .with_structured_output(InvestigationReport)
-        )
+        llm = get_report_llm(InvestigationReport)
         report = llm.invoke(
             messages + [HumanMessage(_REPORT_INSTRUCTION)], config=config
         )

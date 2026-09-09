@@ -83,3 +83,20 @@ def reset_llm_cache() -> None:
     configuration, tests that switch providers MUST call it between cases.
     """
     get_llm.cache_clear()
+
+
+def get_report_llm(schema: type) -> BaseChatModel:
+    """Reasoner bound for structured output over a long tool conversation.
+
+    Summarising many tool results costs far more internal reasoning than a
+    single-shot call, and a truncated structured response is a parse failure
+    rather than a shorter report. Every long-conversation reporter should use
+    this rather than the default ceiling; three separate nodes hit the same
+    truncation before it was shared.
+    """
+    settings = get_settings()
+    return (
+        get_llm(ModelRole.REASONER)
+        .bind(max_tokens=settings.investigation_report_max_tokens)
+        .with_structured_output(schema)
+    )

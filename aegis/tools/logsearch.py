@@ -90,6 +90,10 @@ class LogSearchBackend(Protocol):
         """How noisy a detection rule is."""
         ...
 
+    def list_active_rules(self, days: int = 7) -> list[RuleStats]:
+        """Which rules fired recently, so a caller need not guess rule names."""
+        ...
+
 
 def resolve_log_backend() -> LogSearchBackend:
     """Pick the backend from configuration. Adding a SIEM is a new module here."""

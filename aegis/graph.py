@@ -116,6 +116,14 @@ def gate_decision(
     if any(e.findings.get("is_privileged") for e in enrichments):
         return "human_review"
 
+    # 6. Crown jewel assets always get eyes on them. Being wrong about a
+    #    domain controller costs more than every needless review combined.
+    if alert.hostname:
+        from aegis.tools.assets import Criticality, lookup_asset
+
+        if lookup_asset(alert.hostname).at_least(Criticality.CROWN_JEWEL):
+            return "human_review"
+
     return "auto_close"
 
 
