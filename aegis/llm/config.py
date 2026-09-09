@@ -186,6 +186,24 @@ class LLMSettings(BaseSettings):
     # unscoped search across every index is slow and expensive.
     splunk_search_index: str = "*"
 
+    # --- Splunk polling ---
+    # Splunk's native webhook alert action cannot set custom headers, so it
+    # cannot sign requests for /webhook/alert. Polling a detection search is
+    # the practical ingestion route for a Splunk source.
+    # Run the poller inside the API process. Separate processes would hold
+    # separate in-memory queues and registries, so /metrics and /approvals
+    # would report on a process that never triaged anything.
+    splunk_polling_enabled: bool = False
+    splunk_poll_search: str = "index=aegis_demo sourcetype=aegis:detection"
+    splunk_poll_interval_seconds: int = Field(default=60, gt=0)
+    # Each poll looks back further than the interval, so an alert indexed late
+    # is not missed. Duplicates are absorbed by the registry's idempotency.
+    splunk_poll_overlap_seconds: int = Field(default=120, ge=0)
+    # A search that matches nothing looks identical to a quiet night. After
+    # this many consecutive empty polls the poller says so, because the usual
+    # cause is a filter on a field the deployment does not extract.
+    splunk_empty_poll_warning: int = Field(default=10, gt=0)
+
     # --- Splunk (SIEM source) ---
     splunk_url: str = "https://localhost:8089"
     splunk_token: str | None = None

@@ -43,11 +43,22 @@ async def lifespan(app: FastAPI):
     setup_logging()
     global _graph
     _graph = get_app()  # shared with the worker thread; see get_app() docstring
-    t = threading.Thread(target=worker_loop, args=(_stop,), daemon=True)
-    t.start()
+
+    threads = [threading.Thread(target=worker_loop, args=(_stop,), daemon=True)]
+    if get_settings().splunk_polling_enabled:
+        # In-process on purpose: a separate poller would hold its own queue and
+        # registry, so /metrics and /approvals would report on a process that
+        # never triaged anything.
+        from aegis.ingest.splunk_poller import poll_loop
+
+        threads.append(threading.Thread(target=poll_loop, args=(_stop,), daemon=True))
+
+    for t in threads:
+        t.start()
     yield
     _stop.set()
-    t.join(timeout=5)
+    for t in threads:
+        t.join(timeout=5)
 
 
 app = FastAPI(title="Aegis SOC Triage", lifespan=lifespan)
@@ -85,13 +96,24 @@ class DecisionRequest(BaseModel):
 
 @app.get("/healthz")
 def healthz() -> dict[str, Any]:
+    from aegis.ingest.splunk_poller import POLL_HEALTH
+
     s = get_settings()
-    return {
+    body: dict[str, Any] = {
         "status": "ok",
         "queue_depth": ALERT_QUEUE.qsize(),
         "shadow_mode": s.shadow_mode,
         "kill_switch": s.kill_switch,
     }
+    if s.splunk_polling_enabled:
+        health = POLL_HEALTH.as_dict()
+        body["ingestion"] = health
+        # Surfaced in status so a stalled search is visible to a health check,
+        # not only to whoever reads the logs.
+        if POLL_HEALTH.consecutive_empty >= s.splunk_empty_poll_warning:
+            body["status"] = "degraded"
+            body["warning"] = "ingestion search has matched nothing recently"
+    return body
 
 
 @app.get("/metrics")

@@ -28,6 +28,11 @@ def _production_safeties_off(monkeypatch):
         monkeypatch.setenv(var, "")
     monkeypatch.setenv("THREAT_INTEL_PROVIDER", "mock")
     monkeypatch.setenv("ENDPOINT_PROVIDER", "mock")
+    monkeypatch.setenv("LOG_BACKEND", "mock")
+    monkeypatch.setenv("MCP_ENABLED", "false")
+    monkeypatch.setenv("INVESTIGATOR_ENABLED", "false")
+    monkeypatch.setenv("RESPONSE_PLANNER_ENABLED", "false")
+    monkeypatch.setenv("RESPONSE_ACTIONS_ENABLED", "false")
     # LLMSettings requires a key for whichever reasoner provider is selected, so
     # a placeholder is needed for settings to construct at all. No test invokes
     # a model, so the value is never used. Without this the suite only passes on
