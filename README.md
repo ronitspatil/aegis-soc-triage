@@ -2,10 +2,14 @@
 
 A SOC alert triage agent built with LangGraph. It enriches a SIEM alert from
 several sources in parallel, reasons over the evidence with an LLM, and either
-closes the alert or drafts an incident ticket for a human to approve.
+closes the alert or drafts an incident ticket for a human to approve. Escalated
+alerts can be investigated further by a tool-calling agent that searches
+historical logs.
 
 ```
-SIEM webhook / Splunk
+SIEM webhook / Splunk poller
+        |
+     dedupe                       repeats reuse the first verdict
         |
   orchestrator
         |
@@ -15,15 +19,21 @@ threat    identity   endpoint     parallel, local model
  intel        |          |
    +----+----+----------+
         |
-   synthesizer                    Claude Sonnet, one call per alert
+   synthesizer                    one paid call, tiered by difficulty
         |
   route_on_verdict                pure function, no LLM
      /        \
-auto-close   human review         LangGraph interrupt -> Slack approval
+auto-close   investigator <-> tools    bounded loop, read-only
+                  |
+               planner                 proposes containment
+                  |
+            human review               interrupt -> Slack approval
+                  |
+               executor                the only write calls
 ```
 
-Worker calls run on a local Ollama model. Only synthesis uses a paid model, at
-roughly $0.013 per alert.
+Worker calls run on a local Ollama model. Synthesis costs roughly $0.011 per
+alert; an investigation adds about $0.04 and runs only on escalated alerts.
 
 ## Setup
 
@@ -45,7 +55,7 @@ aegis-triage --ip 185.220.101.5 --user j.doe@corp.com --host WIN-FINANCE-07 --se
 aegis-simulate                                  # labelled scenarios, accuracy, cost
 python -m aegis.simulation.eval_investigation   # investigation agent evaluation
 aegis-slack                                     # Slack approval listener
-uvicorn aegis.ingest.api:app --port 8000        # ingestion API
+uvicorn aegis.ingest.api:app --port 8000        # ingestion API and Splunk poller
 ```
 
 ### API
@@ -57,7 +67,7 @@ uvicorn aegis.ingest.api:app --port 8000        # ingestion API
 | GET | `/approvals` | alerts waiting on a human |
 | POST | `/alerts/{id}/decision` | approve or reject, resumes the graph |
 | GET | `/metrics` | Prometheus exposition |
-| GET | `/healthz` | queue depth, switch state |
+| GET | `/healthz` | queue depth, switch state, ingestion health |
 
 ## Integrations
 
@@ -72,12 +82,17 @@ when you switch.
 | CrowdStrike Falcon | `ENDPOINT_PROVIDER=live` + API client (Hosts, Alerts read) |
 | Splunk | `SPLUNK_URL` + `SPLUNK_TOKEN` |
 | Slack | `SLACK_BOT_TOKEN` + `SLACK_APP_TOKEN` |
+| AWS, over MCP | `MCP_ENABLED=true` + `AWS_PROFILE`, read-only tools only |
 | Postgres | `POSTGRES_URL`, durable checkpoints, alert registry and dedupe index |
 
-`SplunkSource().search_alerts(spl)` returns validated alerts plus any rows that
-failed validation. For Slack, create the app from `slack_app_manifest.yml`, add
-an app-level token with `connections:write`, invite the bot to your channel, and
-run `aegis-slack --check`.
+Splunk cannot sign webhook requests, so alerts are ingested by polling a
+detection search: set `SPLUNK_POLLING_ENABLED=true` and `SPLUNK_POLL_SEARCH`.
+`/healthz` reports degraded when that search stops matching anything. The
+webhook route remains for sources that can sign.
+
+For Slack, create the app from `slack_app_manifest.yml`, add an app-level token
+with `connections:write`, invite the bot to your channel, and run
+`aegis-slack --check`.
 
 ## Configuration
 
@@ -93,10 +108,16 @@ run `aegis-slack --check`.
 | `INVESTIGATOR_ENABLED` | `false` | Tool-calling investigation on escalated alerts |
 | `INVESTIGATION_MAX_TOOL_CALLS` | `10` | Step budget, enforced in code |
 | `LOG_BACKEND` | `mock` | `mock` or `splunk`, for the agent's tools |
+| `RESPONSE_PLANNER_ENABLED` | `false` | Draft containment actions for approval |
+| `RESPONSE_ACTIONS_ENABLED` | `false` | Let the executor run approved actions |
+| `ACTION_DRY_RUN` | `true` | Log containment instead of performing it |
+| `MCP_ENABLED` | `false` | Load external investigation tools over MCP |
+| `SPLUNK_POLLING_ENABLED` | `false` | Poll Splunk for new alerts |
 
 Auto-close requires all of: a false positive verdict, confidence above the
 threshold, no failed enrichments, severity at or below the ceiling, no
-privileged identity, and shadow mode off.
+privileged identity, and shadow mode off. Containment additionally requires an
+approving human decision, and only targets entities named by the alert.
 
 ## Mock fixtures
 
@@ -109,11 +130,15 @@ integration failure. Full set in `aegis/tools/`.
 ## Development
 
 ```bash
-pytest                      # 83 tests, no network, no credentials
+pytest                      # 209 tests, no network, no credentials
 ruff check aegis tests
+
+# Postgres integration tests, skipped without a database
+AEGIS_TEST_POSTGRES_URL=postgresql://localhost/aegis_test pytest tests/test_store_pg.py
 ```
 
-The suite blanks any credentials in `.env`, so it cannot reach live services.
+The suite blanks any credentials in `.env`, so it cannot reach live services or
+a real database.
 
 ## License
 
