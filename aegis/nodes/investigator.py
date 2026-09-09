@@ -18,7 +18,7 @@ from langchain_core.runnables import RunnableConfig
 
 from aegis.llm.config import ModelRole, get_settings
 from aegis.llm.providers import get_llm
-from aegis.nodes.investigation_tools import INVESTIGATION_TOOLS
+from aegis.nodes.investigation_tools import all_investigation_tools
 from aegis.schemas.investigation import InvestigationReport
 from aegis.schemas.state import SOCAgentState
 
@@ -112,7 +112,7 @@ def investigator_node(
         update["investigation_started_at"] = time.monotonic()
 
     try:
-        llm = get_llm(ModelRole.REASONER).bind_tools(INVESTIGATION_TOOLS)
+        llm = get_llm(ModelRole.REASONER).bind_tools(all_investigation_tools())
         response = llm.invoke(messages, config=config)
     except Exception as exc:  # noqa: BLE001 - an investigation is optional context
         logger.warning("investigation step failed: %s", exc)

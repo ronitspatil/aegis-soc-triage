@@ -11,6 +11,7 @@ each loop iteration, so an unbounded tool result is paid for repeatedly.
 from __future__ import annotations
 
 import logging
+from typing import Any
 
 from langchain_core.tools import tool
 
@@ -118,3 +119,14 @@ INVESTIGATION_TOOLS = [
     find_indicator,
     count_rule_firings,
 ]
+
+
+def all_investigation_tools() -> list[Any]:
+    """Built-in tools plus any read-only tools loaded over MCP.
+
+    The built-ins come first so they are preferred, and MCP failures degrade to
+    the built-in set rather than to no investigation.
+    """
+    from aegis.tools.mcp_tools import load_mcp_tools
+
+    return [*INVESTIGATION_TOOLS, *load_mcp_tools()]

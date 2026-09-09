@@ -27,7 +27,7 @@ from aegis.llm.config import get_settings
 from aegis.nodes.endpoint import endpoint_node
 from aegis.nodes.executor import executor_node
 from aegis.nodes.identity import identity_node
-from aegis.nodes.investigation_tools import INVESTIGATION_TOOLS
+from aegis.nodes.investigation_tools import all_investigation_tools
 from aegis.nodes.investigator import (
     investigation_report_node,
     investigator_node,
@@ -274,7 +274,7 @@ def build_graph(checkpointer: Any | None = None):
         "investigation_tools",
         # Our conversation channel is `investigation`, not the default.
         # Tool errors come back as messages so one dead query cannot end the loop.
-        ToolNode(INVESTIGATION_TOOLS, messages_key="investigation"),
+        ToolNode(all_investigation_tools(), messages_key="investigation"),
     )
     g.add_node("investigation_report", investigation_report_node)
     g.add_node("planner", planner_node)

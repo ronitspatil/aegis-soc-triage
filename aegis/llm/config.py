@@ -160,6 +160,17 @@ class LLMSettings(BaseSettings):
     # than a shorter report.
     investigation_report_max_tokens: int = Field(default=4000, gt=0)
 
+    # --- External tools over MCP (investigation only) ---
+    # A server's tool descriptions enter the prompt, so adding one is a
+    # supply-chain decision. Off by default.
+    mcp_enabled: bool = False
+    mcp_config_path: str | None = None
+    mcp_aws_enabled: bool = True
+    # Pinned: an unpinned server ships new tool descriptions into your prompt.
+    mcp_aws_version: str = "latest"
+    aws_region: str = "us-east-1"
+    aws_profile: str | None = None
+
     # --- Response actions ---
     response_planner_enabled: bool = False
     # Executing anything is a separate, later opt-in from proposing it.
