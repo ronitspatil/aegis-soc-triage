@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from aegis.dedup import DEDUPE_INDEX, DedupeIndex, fingerprint
+from aegis.dedup import DEDUPE_INDEX, InMemoryDedupeIndex, fingerprint
 from aegis.schemas.alert import SIEMAlert
 
 
@@ -57,11 +57,11 @@ def test_entity_casing_is_normalised():
 
 
 def test_first_alert_is_not_a_duplicate():
-    assert DedupeIndex().check(alert("SPL-1")) is None
+    assert InMemoryDedupeIndex().check(alert("SPL-1")) is None
 
 
 def test_subsequent_alerts_point_back_to_the_first():
-    idx = DedupeIndex()
+    idx = InMemoryDedupeIndex()
     assert idx.check(alert("SPL-1")) is None
     hit = idx.check(alert("SPL-2"))
     assert hit is not None
@@ -70,7 +70,7 @@ def test_subsequent_alerts_point_back_to_the_first():
 
 
 def test_occurrences_accumulate_so_an_ongoing_attack_still_reads_as_ongoing():
-    idx = DedupeIndex()
+    idx = InMemoryDedupeIndex()
     idx.check(alert("SPL-0"))
     last = None
     for i in range(1, 37):
@@ -79,7 +79,7 @@ def test_occurrences_accumulate_so_an_ongoing_attack_still_reads_as_ongoing():
 
 
 def test_unrelated_alerts_do_not_suppress_each_other():
-    idx = DedupeIndex()
+    idx = InMemoryDedupeIndex()
     idx.check(alert("SPL-1"))
     assert idx.check(alert("SPL-2", hostname="OTHER-HOST")) is None
 
@@ -87,12 +87,12 @@ def test_unrelated_alerts_do_not_suppress_each_other():
 def test_window_expiry_lets_a_recurrence_be_triaged_fresh(monkeypatch):
     """The same rule firing tomorrow is a new situation, not a repeat."""
     monkeypatch.setenv("DEDUPE_WINDOW_SECONDS", "60")
-    idx = DedupeIndex()
+    idx = InMemoryDedupeIndex()
     idx.check(alert("SPL-1"))
 
     clock = {"t": 0.0}
     monkeypatch.setattr("aegis.dedup.time.monotonic", lambda: clock["t"])
-    idx = DedupeIndex()
+    idx = InMemoryDedupeIndex()
     idx.check(alert("SPL-1"))
     clock["t"] = 61.0
     assert idx.check(alert("SPL-2")) is None
@@ -100,13 +100,13 @@ def test_window_expiry_lets_a_recurrence_be_triaged_fresh(monkeypatch):
 
 def test_dedupe_can_be_disabled(monkeypatch):
     monkeypatch.setenv("DEDUPE_ENABLED", "false")
-    idx = DedupeIndex()
+    idx = InMemoryDedupeIndex()
     idx.check(alert("SPL-1"))
     assert idx.check(alert("SPL-2")) is None
 
 
 def test_returned_entry_cannot_mutate_index_state():
-    idx = DedupeIndex()
+    idx = InMemoryDedupeIndex()
     idx.check(alert("SPL-1"))
     hit = idx.check(alert("SPL-2"))
     hit.occurrences = 999

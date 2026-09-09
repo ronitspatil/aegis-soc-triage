@@ -19,6 +19,8 @@ import hashlib
 import threading
 import time
 from dataclasses import dataclass
+from functools import lru_cache
+from typing import Any
 
 from aegis.llm.config import get_settings
 from aegis.schemas.alert import SIEMAlert
@@ -49,7 +51,7 @@ class DedupeEntry:
     occurrences: int
 
 
-class DedupeIndex:
+class InMemoryDedupeIndex:
     """Fingerprint to first-alert mapping, with a bounded window.
 
     The window has to expire: the same rule firing tomorrow is a new situation
@@ -97,4 +99,22 @@ class DedupeIndex:
             self._entries.clear()
 
 
-DEDUPE_INDEX = DedupeIndex()
+@lru_cache(maxsize=1)
+def active_dedupe_index() -> Any:
+    """Postgres when configured, memory otherwise.
+
+    Per-process fingerprints mean two workers each triage an alert storm once.
+    """
+    if get_settings().postgres_url:
+        from aegis.ingest.store_pg import PostgresDedupeIndex
+
+        return PostgresDedupeIndex()
+    return InMemoryDedupeIndex()
+
+
+class _DedupeProxy:
+    def __getattr__(self, name: str) -> Any:
+        return getattr(active_dedupe_index(), name)
+
+
+DEDUPE_INDEX = _DedupeProxy()

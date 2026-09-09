@@ -33,6 +33,7 @@ def _production_safeties_off(monkeypatch):
     monkeypatch.setenv("INVESTIGATOR_ENABLED", "false")
     monkeypatch.setenv("RESPONSE_PLANNER_ENABLED", "false")
     monkeypatch.setenv("RESPONSE_ACTIONS_ENABLED", "false")
+
     # LLMSettings requires a key for whichever reasoner provider is selected, so
     # a placeholder is needed for settings to construct at all. No test invokes
     # a model, so the value is never used. Without this the suite only passes on
@@ -41,6 +42,15 @@ def _production_safeties_off(monkeypatch):
     monkeypatch.setenv("REASONER_PROVIDER", "openrouter")
     monkeypatch.setenv("OPENROUTER_API_KEY", "test-key-never-used")
     monkeypatch.setenv("ANTHROPIC_API_KEY", "")
+
+    # The registry and dedupe backends are cached, and that cache can be
+    # populated during collection while .env is still in effect. Clearing it
+    # around every test keeps the suite from reaching a real database.
+    from aegis.ingest.store import reset_stores
+
+    reset_stores()
+    yield
+    reset_stores()
 
 
 @pytest.fixture

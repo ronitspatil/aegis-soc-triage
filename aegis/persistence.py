@@ -38,6 +38,7 @@ def build_checkpointer() -> Any:
         _pool = ConnectionPool(
             conninfo=settings.postgres_url,
             max_size=20,
+            open=True,  # explicit: the library default is changing
             kwargs={"autocommit": True, "prepare_threshold": 0, "row_factory": dict_row},
         )
 

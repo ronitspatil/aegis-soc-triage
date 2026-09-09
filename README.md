@@ -72,7 +72,7 @@ when you switch.
 | CrowdStrike Falcon | `ENDPOINT_PROVIDER=live` + API client (Hosts, Alerts read) |
 | Splunk | `SPLUNK_URL` + `SPLUNK_TOKEN` |
 | Slack | `SLACK_BOT_TOKEN` + `SLACK_APP_TOKEN` |
-| Postgres | `POSTGRES_URL`, keeps pending approvals across restarts |
+| Postgres | `POSTGRES_URL`, durable checkpoints, alert registry and dedupe index |
 
 `SplunkSource().search_alerts(spl)` returns validated alerts plus any rows that
 failed validation. For Slack, create the app from `slack_app_manifest.yml`, add

@@ -13,8 +13,10 @@ import threading
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from enum import Enum
+from functools import lru_cache
 from typing import Any
 
+from aegis.llm.config import get_settings
 from aegis.schemas.alert import SIEMAlert
 
 
@@ -44,7 +46,7 @@ class AlertRecord:
     duplicate_of: str | None = None
 
 
-class Registry:
+class InMemoryRegistry:
     """Thread-safe alert index. Swap for a DB table in production."""
 
     def __init__(self) -> None:
@@ -81,6 +83,40 @@ class Registry:
             ]
 
 
-# Module-level singletons for the single-process deployment.
-REGISTRY = Registry()
 ALERT_QUEUE: queue.Queue[SIEMAlert] = queue.Queue(maxsize=1000)
+
+
+@lru_cache(maxsize=1)
+def active_registry() -> Any:
+    """Postgres when configured, memory otherwise.
+
+    In-memory state is per-process: a restart loses alert status and occurrence
+    counts, and two workers would not see each other's claims.
+    """
+    if get_settings().postgres_url:
+        from aegis.ingest.store_pg import PostgresRegistry
+
+        return PostgresRegistry()
+    return InMemoryRegistry()
+
+
+class _RegistryProxy:
+    """Forwards to whichever backend is configured.
+
+    A proxy rather than a choice made at import, so configuration is read on
+    first use.
+    """
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(active_registry(), name)
+
+
+REGISTRY = _RegistryProxy()
+
+
+def reset_stores() -> None:
+    """Drop cached backends. Needed when configuration changes."""
+    from aegis.dedup import active_dedupe_index
+
+    active_registry.cache_clear()
+    active_dedupe_index.cache_clear()
