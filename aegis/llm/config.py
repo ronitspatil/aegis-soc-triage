@@ -148,6 +148,13 @@ class LLMSettings(BaseSettings):
     # and analyst reactions are the labelled data you need to tune the gate.
     slack_notify_auto_close: bool = True
 
+    # --- Investigation agent ---
+    # Off by default. Turned on deliberately, like shadow mode.
+    investigator_enabled: bool = False
+    # Budgets are enforced in the node, never asked of the model.
+    investigation_max_tool_calls: int = Field(default=10, gt=0)
+    investigation_timeout_seconds: float = Field(default=120.0, gt=0)
+
     # --- Historical log search (investigation agent) ---
     log_backend: LogBackend = LogBackend.MOCK
     # Splunk only searches a role's default indexes unless told otherwise, so a

@@ -6,6 +6,7 @@ import operator
 from enum import Enum
 from typing import Annotated, Any, TypedDict
 
+from langgraph.graph.message import add_messages
 from pydantic import BaseModel, ConfigDict, Field
 
 from aegis.schemas.alert import SIEMAlert
@@ -77,6 +78,14 @@ class SOCAgentState(TypedDict, total=False):
     # process memory) so ANY process handling the button click knows which
     # message to edit, the listener and the triage worker are separate.
     slack_ts: str
+
+    # --- Investigation agent (runs only after escalation) ---
+    # `add_messages` merges by message id, the reducer LangGraph provides for
+    # conversation channels.
+    investigation: Annotated[list[Any], add_messages]
+    tool_calls_used: int
+    investigation_started_at: float
+    investigation_report: Any
 
     # --- HITL control plane ---
     requires_human_approval: bool
