@@ -112,6 +112,21 @@ def build_ticket_blocks(alert_id: str, ticket: dict[str, Any], severity: str = "
         blocks.append({"type": "section", "text": {"type": "mrkdwn",
                        "text": _truncate(f"*Suggested response*\n{listed}")}})
 
+    inv = ticket.get("investigation")
+    if inv:
+        parts = [f"*Investigation*\n{inv.get('summary', '')}"]
+        if inv.get("scope_concern"):
+            parts.append("_Evidence suggests more hosts or accounts are involved "
+                         "than this alert names._")
+        gaps = inv.get("unanswered") or []
+        if gaps:
+            listed = "\n".join(f"\u2022 {g}" for g in gaps[:3])
+            parts.append(f"*Not determined*\n{listed}")
+        if inv.get("budget_exhausted"):
+            parts.append("_Investigation stopped on its step budget._")
+        blocks.append({"type": "section", "text": {"type": "mrkdwn",
+                       "text": _truncate("\n\n".join(parts))}})
+
     if signals:
         line = "  \u00b7  ".join(
             f"{_agent_label(a)} {v.get('risk')}" + (" (failed)" if v.get("error") else "")

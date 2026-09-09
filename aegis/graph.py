@@ -20,11 +20,18 @@ from functools import lru_cache
 from typing import Any, Literal
 
 from langgraph.graph import END, START, StateGraph
+from langgraph.prebuilt import ToolNode
 from langgraph.types import interrupt
 
 from aegis.llm.config import get_settings
 from aegis.nodes.endpoint import endpoint_node
 from aegis.nodes.identity import identity_node
+from aegis.nodes.investigation_tools import INVESTIGATION_TOOLS
+from aegis.nodes.investigator import (
+    investigation_report_node,
+    investigator_node,
+    should_continue,
+)
 from aegis.nodes.synthesizer import synthesizer_node
 from aegis.nodes.threat_intel import threat_intel_node
 from aegis.persistence import build_checkpointer
@@ -110,6 +117,22 @@ def gate_decision(
     return "auto_close"
 
 
+def route_after_synthesis(
+    state: SOCAgentState,
+) -> Literal["auto_close", "investigator", "human_review"]:
+    """Auto-close first, then optionally investigate before involving a human.
+
+    The auto-close decision is made by `route_on_verdict` before the agent runs,
+    so nothing the investigation finds can cause an alert to close itself. The
+    agent can only make the analyst's job easier.
+    """
+    if route_on_verdict(state) == "auto_close":
+        return "auto_close"
+    if get_settings().investigator_enabled:
+        return "investigator"
+    return "human_review"
+
+
 def auto_close_node(state: SOCAgentState) -> dict:
     """Terminal state for high-confidence false positives."""
     alert = state["alert"]
@@ -126,7 +149,7 @@ def auto_close_node(state: SOCAgentState) -> dict:
 def _draft_ticket(state: SOCAgentState) -> dict[str, Any]:
     """Assemble the incident ticket an analyst will approve or reject."""
     alert = state["alert"]
-    return {
+    ticket: dict[str, Any] = {
         "title": f"[{alert.severity.value.upper()}] {alert.rule_name}, {alert.alert_id}",
         "verdict": verdict_of(state).value,
         "confidence": state.get("confidence", 0.0),
@@ -142,6 +165,17 @@ def _draft_ticket(state: SOCAgentState) -> dict[str, Any]:
             for e in state.get("enrichments", [])
         },
     }
+    report = state.get("investigation_report")
+    if report is not None:
+        ticket["investigation"] = {
+            "summary": report.summary,
+            "corroborating": report.corroborating,
+            "contradicting": report.contradicting,
+            "unanswered": report.unanswered,
+            "scope_concern": report.scope_concern,
+            "budget_exhausted": report.budget_exhausted,
+        }
+    return ticket
 
 
 def human_review_node(state: SOCAgentState) -> dict:
@@ -196,11 +230,31 @@ def build_graph(checkpointer: Any | None = None):
     g.add_edge("identity", "synthesizer")
     g.add_edge("endpoint", "synthesizer")
 
+    g.add_node("investigator", investigator_node)
+    g.add_node(
+        "investigation_tools",
+        # Our conversation channel is `investigation`, not the default.
+        # Tool errors come back as messages so one dead query cannot end the loop.
+        ToolNode(INVESTIGATION_TOOLS, messages_key="investigation"),
+    )
+    g.add_node("investigation_report", investigation_report_node)
+
     g.add_conditional_edges(
         "synthesizer",
-        route_on_verdict,
-        {"auto_close": "auto_close", "human_review": "human_review"},
+        route_after_synthesis,
+        {
+            "auto_close": "auto_close",
+            "investigator": "investigator",
+            "human_review": "human_review",
+        },
     )
+    g.add_conditional_edges(
+        "investigator",
+        should_continue,
+        {"tools": "investigation_tools", "report": "investigation_report"},
+    )
+    g.add_edge("investigation_tools", "investigator")
+    g.add_edge("investigation_report", "human_review")
 
     g.add_edge("auto_close", END)
     g.add_edge("human_review", END)
