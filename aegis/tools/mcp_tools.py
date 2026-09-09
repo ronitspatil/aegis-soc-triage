@@ -4,6 +4,10 @@ Used for context Aegis has no client of its own for. The first is AWS: knowing
 that an IP belongs to your own NAT gateway turns a suspicious egress alert into
 a non-event, and no threat intel feed can tell you that.
 
+The client is written directly against the mcp 2.x API rather than using
+langchain-mcp-adapters, which requires mcp<2 and cannot coexist with the MCP
+server this project exposes.
+
 Two properties of MCP make this different from writing a client:
 
   * A server's tool DESCRIPTIONS enter the prompt. They are text supplied by
@@ -19,15 +23,17 @@ budget, the audit trail, and running only after an alert is already escalated.
 
 from __future__ import annotations
 
-import asyncio
 import json
 import logging
+import re
 from functools import lru_cache
 from typing import Any
 
-from langchain_core.tools import BaseTool
+from langchain_core.tools import BaseTool, StructuredTool
+from pydantic import BaseModel, Field, create_model
 
 from aegis.llm.config import get_settings
+from aegis.tools.mcp_client import MCPClient, MCPToolSpec
 
 logger = logging.getLogger(__name__)
 
@@ -51,6 +57,9 @@ READ_PREFIXES: tuple[str, ...] = (
 # Too many tools degrades selection quality and inflates every prompt in the
 # loop, since schemas are resent each turn.
 MAX_MCP_TOOLS = 12
+
+# Sessions must outlive the load call; stdio servers are subprocesses.
+_client: MCPClient | None = None
 
 
 def is_read_only(tool_name: str) -> bool:
@@ -89,16 +98,60 @@ def _server_config() -> dict[str, Any]:
     }
 
 
-async def _fetch_tools(config: dict[str, Any]) -> list[BaseTool]:
-    from langchain_mcp_adapters.client import MultiServerMCPClient
+_JSON_TYPES: dict[str, Any] = {
+    "string": str, "integer": int, "number": float,
+    "boolean": bool, "array": list, "object": dict,
+}
 
-    client = MultiServerMCPClient(config)
-    return await client.get_tools()
+
+def _args_model(spec: MCPToolSpec) -> type[BaseModel]:
+    """Build a pydantic model from a tool's JSON input schema.
+
+    Unknown types fall back to `Any` rather than being dropped: a parameter the
+    converter does not recognise should still be passable, not silently
+    unavailable.
+    """
+    properties = (spec.input_schema or {}).get("properties") or {}
+    required = set((spec.input_schema or {}).get("required") or [])
+
+    fields: dict[str, Any] = {}
+    for key, prop in properties.items():
+        annotation = _JSON_TYPES.get((prop or {}).get("type"), Any)
+        description = (prop or {}).get("description", "")
+        if key in required:
+            fields[key] = (annotation, Field(..., description=description))
+        else:
+            fields[key] = (annotation | None if annotation is not Any else Any,
+                           Field(default=None, description=description))
+
+    safe_name = re.sub(r"\W", "_", f"{spec.server}_{spec.name}_args")
+    return create_model(safe_name, **fields)
+
+
+def _as_langchain_tool(client: MCPClient, spec: MCPToolSpec) -> BaseTool:
+    """Wrap one MCP tool so the agent calls it like any other."""
+
+    def _call(**kwargs: Any) -> str:
+        # Drop unset optionals: servers often reject explicit nulls.
+        arguments = {k: v for k, v in kwargs.items() if v is not None}
+        return client.call(spec.server, spec.name, arguments)
+
+    return StructuredTool.from_function(
+        func=_call,
+        name=spec.name,
+        description=spec.description or f"{spec.name} from the {spec.server} server",
+        args_schema=_args_model(spec),
+    )
 
 
 def _load_raw_tools(config: dict[str, Any]) -> list[BaseTool]:
-    """Synchronous seam over the async client, so callers and tests stay sync."""
-    return asyncio.run(_fetch_tools(config))
+    """Connect to the configured servers and wrap what they offer."""
+    global _client
+
+    client = MCPClient(config)
+    client.start()
+    _client = client  # kept alive: the sessions must outlive this call
+    return [_as_langchain_tool(client, spec) for spec in client.list_tools()]
 
 
 @lru_cache(maxsize=1)
@@ -118,18 +171,14 @@ def load_mcp_tools() -> tuple[BaseTool, ...]:
 
     try:
         tools = _load_raw_tools(config)
-    except ImportError as exc:
-        # Enabled but unusable is a configuration error, not a quiet fallback.
-        # langchain-mcp-adapters requires mcp<2, while the MCP server in this
-        # project uses the 2.x API, so the two cannot be installed together.
-        logger.error(
-            "MCP_ENABLED is set but the client could not be imported (%s). "
-            "Install the mcp-client extra in a separate environment, or drop "
-            "MCP_ENABLED. Continuing with built-in tools only.", exc,
-        )
-        return ()
     except Exception as exc:  # noqa: BLE001 - external process, many failure modes
-        logger.warning("MCP tools unavailable, continuing without them: %s", exc)
+        # Enabled but unusable is worth an error, not a quiet fallback: the
+        # usual cause is a missing server command rather than a transient fault.
+        logger.error(
+            "MCP_ENABLED is set but no tools could be loaded (%s). "
+            "Check that the server command is installed and runnable. "
+            "Continuing with built-in tools only.", exc,
+        )
         return ()
 
     kept: list[BaseTool] = []
@@ -148,5 +197,9 @@ def load_mcp_tools() -> tuple[BaseTool, ...]:
 
 
 def reset_mcp_tools() -> None:
-    """Drop the cache. Tests and configuration changes need this."""
+    """Drop the cache and close any sessions."""
+    global _client
     load_mcp_tools.cache_clear()
+    if _client is not None:
+        _client.stop()
+        _client = None

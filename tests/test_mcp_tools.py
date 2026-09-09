@@ -109,3 +109,91 @@ def test_builtin_tools_come_first(monkeypatch):
     tools = all_investigation_tools()
     assert tools[: len(INVESTIGATION_TOOLS)] == INVESTIGATION_TOOLS
     assert tools[-1].name == "describe_instances"
+
+
+# --- schema conversion and result flattening ---------------------------------
+
+
+def test_tool_parameters_survive_the_schema_conversion():
+    """mcp 2.x exposes `input_schema`; reading the `inputSchema` alias yields
+    nothing and the tool looks argument-less to the model."""
+    from aegis.tools.mcp_client import MCPToolSpec
+    from aegis.tools.mcp_tools import _args_model
+
+    spec = MCPToolSpec(
+        server="aws", name="describe_instances",
+        input_schema={
+            "type": "object",
+            "properties": {
+                "instance_id": {"type": "string", "description": "The instance"},
+                "max_results": {"type": "integer"},
+            },
+            "required": ["instance_id"],
+        },
+    )
+    model = _args_model(spec)
+    assert set(model.model_fields) == {"instance_id", "max_results"}
+    assert model.model_fields["instance_id"].is_required()
+    assert not model.model_fields["max_results"].is_required()
+
+
+def test_a_tool_with_no_parameters_converts_cleanly():
+    from aegis.tools.mcp_client import MCPToolSpec
+    from aegis.tools.mcp_tools import _args_model
+
+    assert _args_model(MCPToolSpec(server="s", name="list_things")).model_fields == {}
+
+
+def test_unknown_parameter_types_are_kept_rather_than_dropped():
+    """A type the converter does not recognise should still be passable."""
+    from aegis.tools.mcp_client import MCPToolSpec
+    from aegis.tools.mcp_tools import _args_model
+
+    spec = MCPToolSpec(server="s", name="t", input_schema={
+        "properties": {"weird": {"type": "some-future-type"}}})
+    assert "weird" in _args_model(spec).model_fields
+
+
+def test_text_content_is_flattened_for_the_model():
+    from aegis.tools.mcp_client import flatten_content
+
+    class Item:
+        def __init__(self, text): self.text = text
+
+    class Result:
+        content = [Item("first line"), Item("second line")]
+        isError = False
+
+    assert flatten_content(Result()) == "first line\nsecond line"
+
+
+def test_an_empty_result_says_so_rather_than_returning_blank():
+    """A blank string reads to the model as a successful lookup that found
+    nothing."""
+    from aegis.tools.mcp_client import flatten_content
+
+    class Result:
+        content: list = []
+        isError = False
+
+    assert "no content" in flatten_content(Result())
+
+
+def test_a_tool_error_is_reported_as_an_error():
+    from aegis.tools.mcp_client import flatten_content
+
+    class Item:
+        text = "access denied"
+
+    class Result:
+        content = [Item()]
+        isError = True
+
+    assert flatten_content(Result()).startswith("Tool reported an error")
+
+
+def test_calling_an_unconnected_server_is_reported_not_raised():
+    from aegis.tools.mcp_client import MCPClient
+
+    client = MCPClient({})
+    assert "not connected" in client.call("nope", "tool", {})
