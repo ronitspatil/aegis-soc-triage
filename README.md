@@ -86,6 +86,9 @@ run `aegis-slack --check`.
 | `KILL_SWITCH` | `false` | Force every alert to a human |
 | `MAX_AUTO_CLOSE_SEVERITY` | `critical` | Ceiling for automatic closure |
 | `AUTO_CLOSE_CONFIDENCE` | `0.95` | Threshold, set in `aegis/graph.py` |
+| `MODEL_TIERING` | `true` | Send structurally easy alerts to a cheaper model |
+| `DEDUPE_ENABLED` | `true` | Skip triage for a situation already triaged |
+| `DEDUPE_WINDOW_SECONDS` | `900` | How long a fingerprint suppresses repeats |
 
 Auto-close requires all of: a false positive verdict, confidence above the
 threshold, no failed enrichments, severity at or below the ceiling, no

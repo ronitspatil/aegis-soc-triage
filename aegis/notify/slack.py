@@ -65,8 +65,13 @@ def _agent_label(name: str) -> str:
             "endpoint": "Endpoint"}.get(name, name.replace("_", " ").capitalize())
 
 
-def build_ticket_blocks(alert_id: str, ticket: dict[str, Any], severity: str = "medium") -> list[dict]:
-    """Render a drafted incident ticket for analyst review."""
+def build_ticket_blocks(alert_id: str, ticket: dict[str, Any], severity: str = "medium",
+                        occurrences: int = 1) -> list[dict]:
+    """Render a drafted incident ticket for analyst review.
+
+    `occurrences` above 1 means duplicates were suppressed for cost, and the
+    analyst still needs to see that the situation is recurring.
+    """
     verdict = str(ticket.get("verdict", "ambiguous"))
     confidence = ticket.get("confidence")
     entities = {k: v for k, v in (ticket.get("entities") or {}).items() if v}
@@ -77,7 +82,10 @@ def build_ticket_blocks(alert_id: str, ticket: dict[str, Any], severity: str = "
     title = re.sub(r"^\[[A-Z]+\]\s*", "", title).split(" \u2014 ")[0]
 
     subtitle = " \u00b7 ".join(
-        p for p in (severity.capitalize(), f"`{alert_id}`", entities.get("hostname")) if p
+        p for p in (
+            severity.capitalize(), f"`{alert_id}`", entities.get("hostname"),
+            f"{occurrences} occurrences" if occurrences > 1 else None,
+        ) if p
     )
 
     summary = f"*{title}*\n{subtitle}"
@@ -204,6 +212,23 @@ class SlackNotifier:
         return self._post(build_auto_close_blocks(alert_id, verdict, confidence, reasoning, shadow),
                           text=f"Auto-closed {alert_id}",
                           color=RESOLVED_COLOR if shadow else AUTO_CLOSE_COLOR)
+
+    def update_occurrences(self, ts: str, alert_id: str, ticket: dict[str, Any],
+                           occurrences: int, severity: str = "medium") -> None:
+        """Refresh a pending ticket with a new occurrence count."""
+        if not (self._client and ts):
+            return
+        try:
+            self._client.chat_update(
+                channel=self.channel, ts=ts,
+                text=f"Review needed: {ticket.get('title', alert_id)}",
+                blocks=[],
+                attachments=[{
+                    "color": SEVERITY_COLOR.get(severity, SEVERITY_COLOR["medium"]),
+                    "blocks": build_ticket_blocks(alert_id, ticket, severity, occurrences),
+                }])
+        except Exception as exc:  # noqa: BLE001 - notification must not break triage
+            logger.warning("slack occurrence update failed: %s", exc)
 
     def mark_resolved(self, ts: str, alert_id: str, ticket: dict[str, Any],
                       decision: str, actor: str) -> None:

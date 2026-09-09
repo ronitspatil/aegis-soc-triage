@@ -41,7 +41,7 @@ class SynthesisResult(BaseModel):
         ...,
         min_length=40,
         description=(
-            "2-4 sentences explaining how the evidence supports the verdict. "
+            "At most 3 sentences explaining how the evidence supports the verdict. "
             "Reference specific findings. State explicitly whether the specialist "
             "agents corroborate one another or conflict."
         ),
@@ -60,7 +60,7 @@ class SynthesisResult(BaseModel):
     recommended_actions: list[str] = Field(
         default_factory=list,
         description=(
-            "Concrete next steps for the analyst (e.g. 'Isolate WIN-FINANCE-07', "
-            "'Revoke active sessions for j.doe'). Empty if the verdict is false_positive."
+            "At most 4 concrete next steps for the analyst, most important first "
+            "(e.g. 'Isolate WIN-FINANCE-07'). Empty if the verdict is false_positive."
         ),
     )

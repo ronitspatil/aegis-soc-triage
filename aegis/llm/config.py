@@ -20,7 +20,8 @@ class ModelRole(str, Enum):
     """
 
     WORKER = "worker"      # high-volume, low-reasoning: 3x per alert
-    REASONER = "reasoner"  # single high-stakes synthesis call per alert
+    REASONER = "reasoner"  # high-stakes synthesis on hard alerts
+    FAST_REASONER = "fast_reasoner"  # structurally easy alerts, cheaper model
 
 
 class ToolProvider(str, Enum):
@@ -56,6 +57,16 @@ class LLMSettings(BaseSettings):
     # --- Reasoner tier: expensive, runs exactly once per alert ---
     reasoner_provider: Provider = Provider.ANTHROPIC
     reasoner_model: str = Field(default="claude-sonnet-5")
+    # Structurally easy alerts (no conflict, no gaps, nothing suspicious) go to
+    # a cheaper model. Tiering is keyed on deterministic signals rather than the
+    # model's own confidence, which is less well calibrated on small models.
+    fast_reasoner_model: str = Field(default="claude-haiku-4-5-20251001")
+    model_tiering: bool = Field(default=True)
+    # Output is 5x the price of input per token and was the bulk of the cost.
+    # Do not tighten this much further: with structured output a truncated
+    # response is a parse failure, not a shorter answer, and models that emit
+    # internal reasoning tokens spend part of this budget before the JSON.
+    reasoner_max_tokens: int = Field(default=1500, gt=0)
 
     # --- Credentials (only required if the matching provider is selected) ---
     anthropic_api_key: str | None = None
@@ -111,6 +122,14 @@ class LLMSettings(BaseSettings):
 
     # --- Ingestion ---
     webhook_hmac_secret: str | None = None
+
+    # Deduplication. The window must be bounded: the same rule firing tomorrow
+    # is a new situation, not a repeat of today's.
+    dedupe_enabled: bool = True
+    dedupe_window_seconds: int = Field(default=900, gt=0)
+    # An alert storm would otherwise edit the Slack message once per duplicate
+    # and hit the chat.update rate limit.
+    slack_occurrence_update_seconds: int = Field(default=30, ge=0)
 
     # --- Slack (analyst approval surface) ---
     slack_bot_token: str | None = None       # xoxb-...

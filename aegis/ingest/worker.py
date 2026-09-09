@@ -11,6 +11,7 @@ import threading
 import time
 from typing import Any
 
+from aegis.dedup import DEDUPE_INDEX
 from aegis.graph import get_app
 from aegis.ingest.store import ALERT_QUEUE, REGISTRY, AlertStatus
 from aegis.llm.config import get_settings
@@ -22,8 +23,50 @@ from aegis.schemas.state import verdict_of
 logger = logging.getLogger(__name__)
 
 
+def _record_duplicate(alert: SIEMAlert, duplicate: Any, notifier: Any) -> None:
+    """Attach a suppressed alert to the one already triaged.
+
+    The duplicate is never dropped: the original's occurrence count rises so an
+    ongoing attack still reads as ongoing rather than as a single event.
+    """
+    original_id = duplicate.alert_id
+    METRICS.inc("alerts_deduplicated_total", rule=alert.rule_name)
+    REGISTRY.update(alert.alert_id, status=AlertStatus.DUPLICATE,
+                    duplicate_of=original_id)
+    REGISTRY.update(original_id, occurrences=duplicate.occurrences)
+    logger.info("suppressed duplicate", extra={"alert_id": alert.alert_id,
+                                               "duplicate_of": original_id})
+
+    original = REGISTRY.get(original_id)
+    # Only a ticket still awaiting a decision is worth updating; a resolved one
+    # has already been actioned.
+    if not (original and original.status is AlertStatus.AWAITING_APPROVAL
+            and original.slack_ts and original.ticket):
+        return
+
+    # Throttle: a storm of duplicates would otherwise edit the message once per
+    # alert and exhaust Slack's chat.update rate limit.
+    interval = get_settings().slack_occurrence_update_seconds
+    now = time.monotonic()
+    if interval and now - original.slack_updated_at < interval:
+        return
+
+    REGISTRY.update(original_id, slack_updated_at=now)
+    notifier.update_occurrences(original.slack_ts, original_id, original.ticket,
+                                duplicate.occurrences, alert.severity.value)
+
+
 def triage_once(app: Any, alert: SIEMAlert, notifier: Any = None) -> None:
     """Run one alert to a terminal state or to a pending approval."""
+    notifier = notifier or SlackNotifier()
+
+    # Cheapest possible path: an alert describing a situation already triaged
+    # costs nothing. Checked before any enrichment or model call.
+    duplicate = DEDUPE_INDEX.check(alert)
+    if duplicate is not None:
+        _record_duplicate(alert, duplicate, notifier)
+        return
+
     REGISTRY.update(alert.alert_id, status=AlertStatus.RUNNING)
     METRICS.inc("alerts_triaged_total", severity=alert.severity.value)
     cfg = {"configurable": {"thread_id": f"alert-{alert.alert_id}"}}
@@ -43,8 +86,6 @@ def triage_once(app: Any, alert: SIEMAlert, notifier: Any = None) -> None:
     for e in out.get("enrichments", []):
         if e.error:
             METRICS.inc("tool_errors_total", tool=e.agent_name)
-
-    notifier = notifier or SlackNotifier()
 
     if "__interrupt__" in out:
         METRICS.inc("alerts_escalated_total")

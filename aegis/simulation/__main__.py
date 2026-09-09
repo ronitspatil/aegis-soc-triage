@@ -9,15 +9,17 @@ THRESHOLDS = [0.80, 0.85, 0.90, 0.95, 0.99]
 
 
 def _print_table(results: list[Result]) -> None:
-    print(f"\n{'ALERT':9} {'EXPECTED':13} {'ACTUAL':13} {'VERDICT':15} {'CONF':>5}  OK")
-    print("-" * 68)
+    print(f"\n{'ALERT':9} {'EXPECTED':13} {'ACTUAL':13} {'VERDICT':15} {'CONF':>5} {'MODEL':>7}  OK")
+    print("-" * 78)
     for r in results:
         mark = "PASS" if r.correct else "FAIL"
         if r.is_critical_miss:
             mark = "MISS!"
+        model = "haiku" if any("haiku" in m for m in r.models) else "sonnet"
         print(
             f"{r.scenario.alert.alert_id:9} {r.scenario.expected_route:13} "
-            f"{r.actual_route:13} {r.verdict.value:15} {r.confidence:>5.2f}  {mark}"
+            f"{r.actual_route:13} {r.verdict.value:15} {r.confidence:>5.2f} "
+            f"{model:>7}  {mark}"
         )
 
 

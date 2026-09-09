@@ -25,6 +25,7 @@ class AlertStatus(str, Enum):
     AWAITING_APPROVAL = "awaiting_approval"
     RESOLVED = "resolved"
     FAILED = "failed"
+    DUPLICATE = "duplicate"   # same situation as an alert already triaged
 
 
 @dataclass
@@ -38,6 +39,9 @@ class AlertRecord:
     decision: str | None = None
     error: str | None = None
     slack_ts: str | None = None  # message to edit once resolved
+    occurrences: int = 1         # incremented by deduplicated alerts
+    slack_updated_at: float = 0.0  # throttles occurrence-count edits
+    duplicate_of: str | None = None
 
 
 class Registry:

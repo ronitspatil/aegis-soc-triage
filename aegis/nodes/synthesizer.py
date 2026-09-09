@@ -13,6 +13,7 @@ import logging
 from aegis.llm.config import ModelRole, get_settings
 from aegis.llm.providers import get_llm
 from aegis.redaction import prepare_raw_log
+from aegis.schemas.alert import SEVERITY_ORDER, Severity, SIEMAlert
 from aegis.schemas.state import EnrichmentData, SOCAgentState, Verdict
 from aegis.schemas.synthesis import SynthesisResult
 
@@ -40,6 +41,40 @@ strong indicator of malicious activity and report it.
 
 Bias toward escalation. The cost of a needless human review is minutes; the cost
 of auto-closing a real intrusion is a breach."""
+
+
+# Below this, a signal carries no real suspicion.
+QUIET_SIGNAL = 0.1
+
+
+def select_reasoner_role(
+    alert: SIEMAlert, enrichments: list[EnrichmentData]
+) -> ModelRole:
+    """Pick the synthesis model from deterministic properties of the evidence.
+
+    Small models reach the right verdict on easy alerts but report confidence
+    less conservatively when evidence is incomplete. So the cheap tier is used
+    only where nothing is missing and nothing is suspicious, and the choice is
+    never made from the model's own confidence.
+    """
+    settings = get_settings()
+    if not settings.model_tiering:
+        return ModelRole.REASONER
+
+    if not enrichments:
+        return ModelRole.REASONER
+    # A failed lookup means reasoning under uncertainty. Use the better model.
+    if any(e.error for e in enrichments):
+        return ModelRole.REASONER
+    # Any suspicion at all, or disagreement between agents, is not an easy call.
+    if any(e.risk_signal > QUIET_SIGNAL for e in enrichments):
+        return ModelRole.REASONER
+    if any(e.findings.get("is_privileged") for e in enrichments):
+        return ModelRole.REASONER
+    if SEVERITY_ORDER.get(alert.severity, 0) >= SEVERITY_ORDER[Severity.HIGH]:
+        return ModelRole.REASONER
+
+    return ModelRole.FAST_REASONER
 
 
 def _format_enrichments(enrichments: list[EnrichmentData]) -> str:
@@ -110,8 +145,10 @@ def synthesizer_node(state: SOCAgentState) -> dict:
         f"{raw_block}"
     )
 
+    role = select_reasoner_role(alert, enrichments)
+
     try:
-        llm = get_llm(ModelRole.REASONER).with_structured_output(SynthesisResult)
+        llm = get_llm(role).with_structured_output(SynthesisResult)
         result = llm.invoke([("system", _SYSTEM_PROMPT), ("human", human)])
     except Exception as exc:  # noqa: BLE001
         # Reasoner outage must never silently downgrade to auto-close.
@@ -128,7 +165,8 @@ def synthesizer_node(state: SOCAgentState) -> dict:
     result, overrides = _enforce_safety_rules(result, enrichments)
 
     audit = [
-        f"[{AGENT_NAME}] verdict={result.verdict.value} confidence={result.confidence}"
+        f"[{AGENT_NAME}] verdict={result.verdict.value} "
+        f"confidence={result.confidence} model={role.value}"
     ]
     audit += [f"[{AGENT_NAME}] OVERRIDE: {o}" for o in overrides]
 

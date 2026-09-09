@@ -36,6 +36,7 @@ def _build_client(provider: Provider, model: str, settings: LLMSettings) -> Base
             base_url=settings.openrouter_base_url,
             temperature=settings.temperature,
             timeout=settings.request_timeout,
+            max_tokens=settings.reasoner_max_tokens,
         )
 
     if provider is Provider.ANTHROPIC:
@@ -46,6 +47,7 @@ def _build_client(provider: Provider, model: str, settings: LLMSettings) -> Base
             api_key=settings.anthropic_api_key,
             temperature=settings.temperature,
             timeout=settings.request_timeout,
+            max_tokens=settings.reasoner_max_tokens,
         )
 
     # Enum exhaustiveness guard: adding a Provider without wiring it fails loudly.
@@ -65,6 +67,10 @@ def get_llm(role: ModelRole) -> BaseChatModel:
         return _build_client(settings.worker_provider, settings.worker_model, settings)
     if role is ModelRole.REASONER:
         return _build_client(settings.reasoner_provider, settings.reasoner_model, settings)
+    if role is ModelRole.FAST_REASONER:
+        return _build_client(
+            settings.reasoner_provider, settings.fast_reasoner_model, settings
+        )
 
     raise ValueError(f"Unsupported role: {role}")
 
