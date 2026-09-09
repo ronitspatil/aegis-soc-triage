@@ -118,9 +118,9 @@ def test_returned_entry_cannot_mutate_index_state():
 
 def test_storm_of_duplicates_does_not_spam_slack(monkeypatch):
     """One chat.update per duplicate would exhaust Slack's rate limit."""
+    from aegis.dedup import DedupeEntry
     from aegis.ingest.store import REGISTRY, AlertStatus
     from aegis.ingest.worker import _record_duplicate
-    from aegis.dedup import DedupeEntry
 
     class FakeNotifier:
         def __init__(self): self.updates = 0
@@ -141,9 +141,9 @@ def test_storm_of_duplicates_does_not_spam_slack(monkeypatch):
 
 
 def test_resolved_tickets_are_not_reopened_by_duplicates():
+    from aegis.dedup import DedupeEntry
     from aegis.ingest.store import REGISTRY, AlertStatus
     from aegis.ingest.worker import _record_duplicate
-    from aegis.dedup import DedupeEntry
 
     class FakeNotifier:
         def __init__(self): self.updates = 0

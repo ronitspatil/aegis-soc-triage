@@ -36,6 +36,14 @@ class ToolProvider(str, Enum):
     PUBLIC = "public"
 
 
+class LogBackend(str, Enum):
+    """Which SIEM the investigation agent searches. The core pipeline does not
+    depend on any of these; only the agent's tools do."""
+
+    MOCK = "mock"
+    SPLUNK = "splunk"
+
+
 class Provider(str, Enum):
     OLLAMA = "ollama"
     OPENROUTER = "openrouter"
@@ -139,6 +147,13 @@ class LLMSettings(BaseSettings):
     # Auto-closed alerts are posted too: silent automation cannot be validated,
     # and analyst reactions are the labelled data you need to tune the gate.
     slack_notify_auto_close: bool = True
+
+    # --- Historical log search (investigation agent) ---
+    log_backend: LogBackend = LogBackend.MOCK
+    # Splunk only searches a role's default indexes unless told otherwise, so a
+    # custom index returns nothing without this. Narrow it in production: an
+    # unscoped search across every index is slow and expensive.
+    splunk_search_index: str = "*"
 
     # --- Splunk (SIEM source) ---
     splunk_url: str = "https://localhost:8089"
