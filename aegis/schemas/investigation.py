@@ -39,8 +39,11 @@ class InvestigationReport(BaseModel):
     scope_concern: bool = Field(
         default=False,
         description=(
-            "True if evidence suggests more hosts or accounts are involved than "
-            "the alert names."
+            "True ONLY if a tool result showed a specific host or account, not "
+            "named in this alert, involved in the same activity. Widely-used "
+            "infrastructure appearing on many hosts (public DNS resolvers, "
+            "cloud endpoints, update services) is not scope. If unsure, set "
+            "false and put the question in `unanswered` instead."
         ),
     )
     budget_exhausted: bool = Field(

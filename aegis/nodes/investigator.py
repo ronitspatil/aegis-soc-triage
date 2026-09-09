@@ -11,9 +11,10 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import Any, Literal
+from typing import Any, Literal, Optional
 
 from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_core.runnables import RunnableConfig
 
 from aegis.llm.config import ModelRole, get_settings
 from aegis.llm.providers import get_llm
@@ -89,8 +90,18 @@ def budget_remaining(state: SOCAgentState) -> bool:
     )
 
 
-def investigator_node(state: SOCAgentState) -> dict[str, Any]:
-    """One turn of the loop: ask the model what it wants to know next."""
+def investigator_node(
+    # `Optional[...]` rather than `| None`: LangGraph matches this annotation as
+    # a literal string under `from __future__ import annotations`, and only
+    # accepts "RunnableConfig" or "Optional[RunnableConfig]".
+    state: SOCAgentState,
+    config: Optional[RunnableConfig] = None,  # noqa: UP045
+) -> dict[str, Any]:
+    """One turn of the loop: ask the model what it wants to know next.
+
+    `config` is declared so LangGraph propagates callbacks (token metering,
+    tracing) into the model call.
+    """
     messages = list(state.get("investigation") or [])
     update: dict[str, Any] = {}
 
@@ -102,7 +113,7 @@ def investigator_node(state: SOCAgentState) -> dict[str, Any]:
 
     try:
         llm = get_llm(ModelRole.REASONER).bind_tools(INVESTIGATION_TOOLS)
-        response = llm.invoke(messages)
+        response = llm.invoke(messages, config=config)
     except Exception as exc:  # noqa: BLE001 - an investigation is optional context
         logger.warning("investigation step failed: %s", exc)
         return {
@@ -138,7 +149,10 @@ def should_continue(state: SOCAgentState) -> Literal["tools", "report"]:
     return "tools"
 
 
-def investigation_report_node(state: SOCAgentState) -> dict[str, Any]:
+def investigation_report_node(
+    state: SOCAgentState,
+    config: Optional[RunnableConfig] = None,  # noqa: UP045
+) -> dict[str, Any]:
     """Turn the conversation into a structured report for the analyst."""
     messages = list(state.get("investigation") or [])
     exhausted = not budget_remaining(state)
@@ -152,8 +166,14 @@ def investigation_report_node(state: SOCAgentState) -> dict[str, Any]:
         }
 
     try:
-        llm = get_llm(ModelRole.REASONER).with_structured_output(InvestigationReport)
-        report = llm.invoke(messages + [HumanMessage(_REPORT_INSTRUCTION)])
+        llm = (
+            get_llm(ModelRole.REASONER)
+            .bind(max_tokens=get_settings().investigation_report_max_tokens)
+            .with_structured_output(InvestigationReport)
+        )
+        report = llm.invoke(
+            messages + [HumanMessage(_REPORT_INSTRUCTION)], config=config
+        )
     except Exception as exc:  # noqa: BLE001
         logger.warning("investigation report failed: %s", exc)
         return {

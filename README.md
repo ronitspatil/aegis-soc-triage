@@ -43,6 +43,7 @@ Add a reasoner key to `.env`: either `OPENROUTER_API_KEY` with
 ```bash
 aegis-triage --ip 185.220.101.5 --user j.doe@corp.com --host WIN-FINANCE-07 --severity high
 aegis-simulate                                  # labelled scenarios, accuracy, cost
+python -m aegis.simulation.eval_investigation   # investigation agent evaluation
 aegis-slack                                     # Slack approval listener
 uvicorn aegis.ingest.api:app --port 8000        # ingestion API
 ```
@@ -89,6 +90,9 @@ run `aegis-slack --check`.
 | `MODEL_TIERING` | `true` | Send structurally easy alerts to a cheaper model |
 | `DEDUPE_ENABLED` | `true` | Skip triage for a situation already triaged |
 | `DEDUPE_WINDOW_SECONDS` | `900` | How long a fingerprint suppresses repeats |
+| `INVESTIGATOR_ENABLED` | `false` | Tool-calling investigation on escalated alerts |
+| `INVESTIGATION_MAX_TOOL_CALLS` | `10` | Step budget, enforced in code |
+| `LOG_BACKEND` | `mock` | `mock` or `splunk`, for the agent's tools |
 
 Auto-close requires all of: a false positive verdict, confidence above the
 threshold, no failed enrichments, severity at or below the ceiling, no

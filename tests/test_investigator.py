@@ -61,7 +61,10 @@ class FakeLLM:
     def with_structured_output(self, schema: Any) -> FakeLLM:
         return self
 
-    def invoke(self, messages: list[Any]) -> Any:
+    def bind(self, **kw: Any) -> FakeLLM:
+        return self
+
+    def invoke(self, messages: list[Any], config: Any = None) -> Any:
         self.calls += 1
         return self.responses.pop(0) if self.responses else AIMessage(content="done")
 
@@ -158,7 +161,7 @@ def test_a_model_failure_produces_a_report_rather_than_crashing(monkeypatch):
     """An investigation is optional context. Losing it must not lose the alert."""
     class Broken:
         def bind_tools(self, tools): return self
-        def invoke(self, messages): raise RuntimeError("model unavailable")
+        def invoke(self, messages, config=None): raise RuntimeError("model unavailable")
 
     monkeypatch.setattr("aegis.nodes.investigator.get_llm", lambda role: Broken())
     update = investigator_node(_state())

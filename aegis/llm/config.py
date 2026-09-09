@@ -154,6 +154,11 @@ class LLMSettings(BaseSettings):
     # Budgets are enforced in the node, never asked of the model.
     investigation_max_tool_calls: int = Field(default=10, gt=0)
     investigation_timeout_seconds: float = Field(default=120.0, gt=0)
+    # The report summarises a long tool conversation, so the model spends far
+    # more on internal reasoning than synthesis does. Measured truncation at
+    # 1500 with 1263 reasoning tokens, which surfaces as a parse failure rather
+    # than a shorter report.
+    investigation_report_max_tokens: int = Field(default=4000, gt=0)
 
     # --- Historical log search (investigation agent) ---
     log_backend: LogBackend = LogBackend.MOCK
