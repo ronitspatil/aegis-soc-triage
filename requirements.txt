@@ -1,0 +1,26 @@
+# --- Core agent runtime ---
+langgraph>=0.2.60
+langchain-core>=0.3.29
+
+# --- LLM providers (dual-model strategy) ---
+langchain-ollama>=0.2.2      # local / cheap worker models
+langchain-openai>=0.2.14     # OpenRouter is OpenAI-API compatible
+langchain-anthropic>=0.3.0   # high-reasoning synthesis node
+
+# --- Validation & config ---
+pydantic>=2.9
+pydantic-settings>=2.6
+python-dotenv>=1.0.1
+
+# --- Dev ---
+pytest>=8.3
+grandalf>=0.8
+httpx>=0.27
+
+# --- Production: persistence, ingestion, MCP ---
+langgraph-checkpoint-postgres>=2.0
+psycopg[binary,pool]>=3.2
+fastapi>=0.115
+uvicorn[standard]>=0.32
+mcp>=2.2
+slack_sdk>=3.33

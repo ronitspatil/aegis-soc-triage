@@ -1,0 +1,20 @@
+display_information:
+  name: Aegis SOC
+  description: Autonomous SOC alert triage, posts incident tickets for analyst approval
+  background_color: "#1a1d21"
+features:
+  bot_user:
+    display_name: Aegis
+    always_online: true
+oauth_config:
+  scopes:
+    bot:
+      - chat:write          # post incident tickets
+      - chat:write.public    # post to channels without being invited
+      - reactions:read       # read thumbs-down feedback on auto-closes
+settings:
+  interactivity:
+    is_enabled: true         # Socket Mode carries this; no request_url needed
+  socket_mode_enabled: true
+  org_deploy_enabled: false
+  token_rotation_enabled: false
