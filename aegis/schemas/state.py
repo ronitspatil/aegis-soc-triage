@@ -87,6 +87,10 @@ class SOCAgentState(TypedDict, total=False):
     investigation_started_at: float
     investigation_report: Any
 
+    # --- Response (proposed before approval, executed after) ---
+    response_plan: Any
+    executed_actions: Annotated[list[str], operator.add]
+
     # --- HITL control plane ---
     requires_human_approval: bool
     human_decision: str | None

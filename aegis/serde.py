@@ -16,6 +16,10 @@ ALLOWED_TYPES: list[tuple[str, str]] = [
     ("aegis.schemas.alert", "Severity"),
     ("aegis.schemas.state", "EnrichmentData"),
     ("aegis.schemas.state", "Verdict"),
+    ("aegis.schemas.investigation", "InvestigationReport"),
+    ("aegis.schemas.response", "ResponsePlan"),
+    ("aegis.schemas.response", "ProposedAction"),
+    ("aegis.schemas.response", "ActionType"),
 ]
 
 

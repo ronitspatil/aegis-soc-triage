@@ -25,6 +25,7 @@ from langgraph.types import interrupt
 
 from aegis.llm.config import get_settings
 from aegis.nodes.endpoint import endpoint_node
+from aegis.nodes.executor import executor_node
 from aegis.nodes.identity import identity_node
 from aegis.nodes.investigation_tools import INVESTIGATION_TOOLS
 from aegis.nodes.investigator import (
@@ -32,6 +33,7 @@ from aegis.nodes.investigator import (
     investigator_node,
     should_continue,
 )
+from aegis.nodes.planner import planner_node
 from aegis.nodes.synthesizer import synthesizer_node
 from aegis.nodes.threat_intel import threat_intel_node
 from aegis.persistence import build_checkpointer
@@ -130,7 +132,7 @@ def route_after_synthesis(
         return "auto_close"
     if get_settings().investigator_enabled:
         return "investigator"
-    return "human_review"
+    return "planner"
 
 
 def auto_close_node(state: SOCAgentState) -> dict:
@@ -144,6 +146,27 @@ def auto_close_node(state: SOCAgentState) -> dict:
             f"(confidence={state.get('confidence')}), no human review"
         ],
     }
+
+
+def _as_report(value: Any) -> Any:
+    """Coerce a checkpointed report back into its model.
+
+    A round trip through the checkpointer can hand back a plain dict, and
+    calling attributes on that fails only in production.
+    """
+    from aegis.schemas.investigation import InvestigationReport
+
+    if value is None or isinstance(value, InvestigationReport):
+        return value
+    return InvestigationReport.model_validate(value)
+
+
+def _as_plan(value: Any) -> Any:
+    from aegis.schemas.response import ResponsePlan
+
+    if value is None or isinstance(value, ResponsePlan):
+        return value
+    return ResponsePlan.model_validate(value)
 
 
 def _draft_ticket(state: SOCAgentState) -> dict[str, Any]:
@@ -165,16 +188,17 @@ def _draft_ticket(state: SOCAgentState) -> dict[str, Any]:
             for e in state.get("enrichments", [])
         },
     }
-    report = state.get("investigation_report")
+    plan = _as_plan(state.get("response_plan"))
+    if plan is not None and plan.actions:
+        ticket["proposed_actions"] = [
+            {"action": a.action.value, "target": a.target,
+             "rationale": a.rationale, "reversible": a.reversible}
+            for a in plan.actions
+        ]
+
+    report = _as_report(state.get("investigation_report"))
     if report is not None:
-        ticket["investigation"] = {
-            "summary": report.summary,
-            "corroborating": report.corroborating,
-            "contradicting": report.contradicting,
-            "unanswered": report.unanswered,
-            "scope_concern": report.scope_concern,
-            "budget_exhausted": report.budget_exhausted,
-        }
+        ticket["investigation"] = report.model_dump(mode="json")
     return ticket
 
 
@@ -199,6 +223,21 @@ def human_review_node(state: SOCAgentState) -> dict:
         "human_decision": str(decision),
         "audit_log": [f"[human_review] analyst decision recorded: {decision}"],
     }
+
+
+def route_after_decision(state: SOCAgentState) -> Literal["executor", "__end__"]:
+    """Containment runs only after an approving decision, and only when enabled.
+
+    The executor is unreachable except through here, which is itself only
+    reachable after `interrupt()` returned a human decision.
+    """
+    from aegis.nodes.executor import decision_approves_response
+
+    if not get_settings().response_actions_enabled:
+        return "__end__"
+    if not decision_approves_response(state.get("human_decision")):
+        return "__end__"
+    return "executor"
 
 
 def build_graph(checkpointer: Any | None = None):
@@ -238,6 +277,8 @@ def build_graph(checkpointer: Any | None = None):
         ToolNode(INVESTIGATION_TOOLS, messages_key="investigation"),
     )
     g.add_node("investigation_report", investigation_report_node)
+    g.add_node("planner", planner_node)
+    g.add_node("executor", executor_node)
 
     g.add_conditional_edges(
         "synthesizer",
@@ -245,7 +286,7 @@ def build_graph(checkpointer: Any | None = None):
         {
             "auto_close": "auto_close",
             "investigator": "investigator",
-            "human_review": "human_review",
+            "planner": "planner",
         },
     )
     g.add_conditional_edges(
@@ -254,10 +295,15 @@ def build_graph(checkpointer: Any | None = None):
         {"tools": "investigation_tools", "report": "investigation_report"},
     )
     g.add_edge("investigation_tools", "investigator")
-    g.add_edge("investigation_report", "human_review")
+    g.add_edge("investigation_report", "planner")
+    g.add_edge("planner", "human_review")
 
     g.add_edge("auto_close", END)
-    g.add_edge("human_review", END)
+    g.add_conditional_edges(
+        "human_review", route_after_decision,
+        {"executor": "executor", "__end__": END},
+    )
+    g.add_edge("executor", END)
 
     # Durable when POSTGRES_URL is set, in-memory otherwise. Either way the
     # serializer restricts deserialization to our own types (aegis/serde.py).

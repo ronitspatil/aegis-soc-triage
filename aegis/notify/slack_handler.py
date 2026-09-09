@@ -42,7 +42,7 @@ def handle_block_action(payload: dict[str, Any], notifier: SlackNotifier | None 
     try:
         # Slack's user id becomes the audit attribution, a real improvement
         # over free-text decisions.
-        apply_decision(alert_id, decision, actor=user, source="slack")
+        final_state = apply_decision(alert_id, decision, actor=user, source="slack")
     except DecisionError as exc:
         # Two analysts clicking the same message is normal, not an error.
         logger.info("slack decision rejected: %s", exc)
@@ -68,6 +68,13 @@ def handle_block_action(payload: dict[str, Any], notifier: SlackNotifier | None 
     if ts:
         # Swap the buttons for a resolution line so it cannot be double-actioned.
         notifier.mark_resolved(ts, alert_id, ticket, decision, user)
+        executed = list(final_state.get("executed_actions") or [])
+        refused = [
+            line.split("REFUSED ", 1)[1]
+            for line in (final_state.get("audit_log") or [])
+            if "REFUSED " in line
+        ]
+        notifier.post_execution_summary(ts, alert_id, executed, refused)
 
     return {"ok": True, "alert_id": alert_id, "decision": decision, "actor": user}
 

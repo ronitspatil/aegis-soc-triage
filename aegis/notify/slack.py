@@ -112,6 +112,16 @@ def build_ticket_blocks(alert_id: str, ticket: dict[str, Any], severity: str = "
         blocks.append({"type": "section", "text": {"type": "mrkdwn",
                        "text": _truncate(f"*Suggested response*\n{listed}")}})
 
+    proposed = ticket.get("proposed_actions") or []
+    if proposed:
+        lines = []
+        for a in proposed:
+            mark = "" if a.get("reversible", True) else "  (not reversible)"
+            lines.append(f"{a['action'].replace('_', ' ')} \u2192 `{a['target']}`{mark}")
+        blocks.append({"type": "section", "text": {"type": "mrkdwn", "text": _truncate(
+            "*Proposed containment*\n" + "\n".join(lines) +
+            "\n_Runs only if you confirm._")}})
+
     inv = ticket.get("investigation")
     if inv:
         parts = [f"*Investigation*\n{inv.get('summary', '')}"]
@@ -244,6 +254,31 @@ class SlackNotifier:
                 }])
         except Exception as exc:  # noqa: BLE001 - notification must not break triage
             logger.warning("slack occurrence update failed: %s", exc)
+
+    def post_execution_summary(self, ts: str, alert_id: str,
+                               executed: list[str], refused: list[str]) -> None:
+        """Reply in thread with what actually ran.
+
+        An approver who is not told that two of their approved steps were
+        refused will assume they happened.
+        """
+        if not self._client or not (executed or refused):
+            return
+        lines = []
+        if executed:
+            lines.append("*Actions taken*\n" + "\n".join(f"\u2022 {e}" for e in executed))
+        if refused:
+            lines.append(
+                "*Not taken*\n" + "\n".join(f"\u2022 {r}" for r in refused)
+                + "\n_These targets were not named by the alert. Raise them separately._")
+        try:
+            self._client.chat_postMessage(
+                channel=self.channel, thread_ts=ts,
+                text=f"Response summary for {alert_id}",
+                blocks=[{"type": "section", "text": {"type": "mrkdwn",
+                         "text": _truncate("\n\n".join(lines))}}])
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("slack execution summary failed: %s", exc)
 
     def mark_resolved(self, ts: str, alert_id: str, ticket: dict[str, Any],
                       decision: str, actor: str) -> None:

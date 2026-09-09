@@ -55,9 +55,10 @@ def test_investigation_only_happens_on_the_escalation_branch(clean_state, monkey
 
 
 def test_agent_is_off_by_default(clean_state):
-    """Enabled deliberately, like shadow mode."""
+    """Enabled deliberately, like shadow mode. Escalation goes straight to the
+    planner, which is itself a no-op unless enabled."""
     escalating = {**clean_state, "verdict": Verdict.TRUE_POSITIVE}
-    assert route_after_synthesis(escalating) == "human_review"
+    assert route_after_synthesis(escalating) == "planner"
 
 
 def test_nothing_routes_from_the_agent_back_into_auto_close():
@@ -77,7 +78,8 @@ def test_the_loop_closes_and_terminates_at_human_review():
     edges = _edges(build_graph())
     assert ("investigator", "investigation_tools") in edges
     assert ("investigation_tools", "investigator") in edges
-    assert ("investigation_report", "human_review") in edges
+    assert ("investigation_report", "planner") in edges
+    assert ("planner", "human_review") in edges
 
 
 # --- the report reaches the analyst -----------------------------------------

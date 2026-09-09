@@ -160,6 +160,14 @@ class LLMSettings(BaseSettings):
     # than a shorter report.
     investigation_report_max_tokens: int = Field(default=4000, gt=0)
 
+    # --- Response actions ---
+    response_planner_enabled: bool = False
+    # Executing anything is a separate, later opt-in from proposing it.
+    response_actions_enabled: bool = False
+    # Even with execution enabled, actions are logged rather than performed
+    # until this is turned off. Shadow mode for containment.
+    action_dry_run: bool = True
+
     # --- Historical log search (investigation agent) ---
     log_backend: LogBackend = LogBackend.MOCK
     # Splunk only searches a role's default indexes unless told otherwise, so a
