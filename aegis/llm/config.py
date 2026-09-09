@@ -124,6 +124,9 @@ class LLMSettings(BaseSettings):
     max_auto_close_severity: str = Field(default="critical")
 
     # --- Persistence ---
+    # Bounded so an unreachable database is reported rather than retried
+    # indefinitely at startup.
+    postgres_connect_timeout: float = Field(default=5.0, gt=0)
     postgres_url: str | None = Field(
         default=None, description="If set, interrupts survive process restarts"
     )

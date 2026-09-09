@@ -105,6 +105,17 @@ def healthz() -> dict[str, Any]:
         "shadow_mode": s.shadow_mode,
         "kill_switch": s.kill_switch,
     }
+    if s.postgres_url:
+        from aegis.ingest.store_pg import ping
+
+        if ping():
+            body["database"] = "ok"
+        else:
+            # A database that dies after startup should be visible to a health
+            # check, not only to whoever reads the logs.
+            body["database"] = "unreachable"
+            body["status"] = "degraded"
+
     if s.splunk_polling_enabled:
         health = POLL_HEALTH.as_dict()
         body["ingestion"] = health

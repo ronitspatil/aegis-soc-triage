@@ -148,3 +148,34 @@ def test_health_is_ok_when_ingestion_is_flowing(monkeypatch):
     assert body["status"] == "ok"
     assert body["ingestion"]["total_ingested"] == 1
     _drain()
+
+
+# --- dependency health -------------------------------------------------------
+
+
+def test_health_reports_an_unreachable_database(monkeypatch):
+    """A database that dies after startup must surface on the health endpoint,
+    not only in the logs."""
+    from aegis.ingest import api
+
+    monkeypatch.setenv("POSTGRES_URL", "postgresql://nobody@127.0.0.1:1/none")
+    monkeypatch.setattr("aegis.ingest.store_pg.ping", lambda: False)
+    body = api.healthz()
+    assert body["database"] == "unreachable"
+    assert body["status"] == "degraded"
+
+
+def test_health_reports_a_reachable_database(monkeypatch):
+    from aegis.ingest import api
+
+    monkeypatch.setenv("POSTGRES_URL", "postgresql://x@127.0.0.1:5432/x")
+    monkeypatch.setattr("aegis.ingest.store_pg.ping", lambda: True)
+    body = api.healthz()
+    assert body["database"] == "ok"
+    assert body["status"] == "ok"
+
+
+def test_health_omits_the_database_when_none_is_configured():
+    from aegis.ingest import api
+
+    assert "database" not in api.healthz()

@@ -67,7 +67,7 @@ uvicorn aegis.ingest.api:app --port 8000        # ingestion API and Splunk polle
 | GET | `/approvals` | alerts waiting on a human |
 | POST | `/alerts/{id}/decision` | approve or reject, resumes the graph |
 | GET | `/metrics` | Prometheus exposition |
-| GET | `/healthz` | queue depth, switch state, ingestion health |
+| GET | `/healthz` | queue depth, switch state, ingestion and database health |
 
 ## Integrations
 

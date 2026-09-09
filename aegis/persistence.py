@@ -39,10 +39,26 @@ def build_checkpointer() -> Any:
             conninfo=settings.postgres_url,
             max_size=20,
             open=True,  # explicit: the library default is changing
-            kwargs={"autocommit": True, "prepare_threshold": 0, "row_factory": dict_row},
+            # Bounded: without these an unreachable database makes startup
+            # retry forever instead of reporting anything.
+            timeout=settings.postgres_connect_timeout,
+            kwargs={"autocommit": True, "prepare_threshold": 0,
+                    "row_factory": dict_row,
+                    "connect_timeout": int(settings.postgres_connect_timeout)},
         )
 
     saver = PostgresSaver(_pool, serde=build_serializer())
-    saver.setup()  # idempotent: creates the checkpoint tables if absent
+    try:
+        saver.setup()  # idempotent: creates the checkpoint tables if absent
+    except Exception as exc:  # noqa: BLE001
+        # Fail loudly rather than falling back to memory. Starting without
+        # durable checkpoints would silently discard suspended approvals, and
+        # a process that exits with a clear reason is easier to operate than
+        # one that appears healthy and is not.
+        _pool = None
+        raise RuntimeError(
+            f"POSTGRES_URL is set but unreachable ({settings.postgres_url}): {exc}. "
+            "Start the database, or unset POSTGRES_URL to run without durable state."
+        ) from exc
     logger.info("using PostgresSaver, interrupts survive restarts")
     return saver

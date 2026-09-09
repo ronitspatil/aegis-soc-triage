@@ -61,15 +61,18 @@ def _get_pool() -> Any:
             from psycopg.rows import dict_row
             from psycopg_pool import ConnectionPool
 
+            settings = get_settings()
             _pool = ConnectionPool(
-                conninfo=get_settings().postgres_url,
+                conninfo=settings.postgres_url,
                 max_size=10,
                 open=True,  # explicit: the library default is changing
+                timeout=settings.postgres_connect_timeout,
                 # client_encoding is explicit because a SQL_ASCII database
                 # makes psycopg return text columns as bytes, and an enum
                 # lookup then fails on b'queued' rather than 'queued'.
                 kwargs={"autocommit": True, "row_factory": dict_row,
-                        "client_encoding": "UTF8"},
+                        "client_encoding": "UTF8",
+                        "connect_timeout": int(settings.postgres_connect_timeout)},
             )
             with _pool.connection() as conn:
                 conn.execute(SCHEMA)
@@ -224,3 +227,22 @@ class PostgresDedupeIndex:
 
 def utcnow() -> datetime:
     return datetime.now(UTC)
+
+
+def ping() -> bool:
+    """Whether the database is reachable right now.
+
+    A database that dies after startup should surface on the health endpoint
+    rather than as failures buried in the logs.
+
+    Recovery is not instant: the pool backs off between reconnect attempts, so
+    this can report unreachable for around a minute after the database returns.
+    That is the pool healing, not a stuck process.
+    """
+    try:
+        with _get_pool().connection() as conn:
+            conn.execute("SELECT 1")
+        return True
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("database unreachable: %s", exc)
+        return False
