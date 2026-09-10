@@ -42,6 +42,7 @@ class AlertRecord:
     error: str | None = None
     slack_ts: str | None = None  # message to edit once resolved
     occurrences: int = 1         # incremented by deduplicated alerts
+    attempts: int = 0            # triage attempts, for transient-fault retries
     slack_updated_at: float = 0.0  # throttles occurrence-count edits
     duplicate_of: str | None = None
 

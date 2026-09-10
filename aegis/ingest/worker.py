@@ -23,6 +23,50 @@ from aegis.schemas.state import verdict_of
 logger = logging.getLogger(__name__)
 
 
+def is_transient(exc: BaseException) -> bool:
+    """Whether an error is worth another attempt.
+
+    A dropped database connection fails the current call and succeeds on the
+    next one, because the pool discards the dead connection. Treating that as a
+    permanent failure loses the alert.
+    """
+    try:
+        import psycopg
+    except ImportError:
+        return False
+    if isinstance(exc, psycopg.OperationalError):
+        return True
+    try:
+        from psycopg_pool import PoolTimeout
+
+        return isinstance(exc, PoolTimeout)
+    except ImportError:
+        return False
+
+
+def _handle_triage_error(alert: SIEMAlert, exc: BaseException) -> None:
+    """Requeue on a transient fault, fail loudly otherwise."""
+    record = REGISTRY.get(alert.alert_id)
+    attempts = (record.attempts if record else 0) + 1
+    limit = get_settings().max_triage_attempts
+
+    if is_transient(exc) and attempts < limit:
+        METRICS.inc("triage_retries_total")
+        logger.warning("triage hit a transient fault, requeuing (attempt %d of %d): %s",
+                       attempts, limit, exc,
+                       extra={"alert_id": alert.alert_id})
+        REGISTRY.update(alert.alert_id, status=AlertStatus.QUEUED,
+                        attempts=attempts, error=str(exc))
+        ALERT_QUEUE.put(alert)
+        return
+
+    # A crashed triage must be visible, never silently dropped.
+    logger.exception("triage failed", extra={"alert_id": alert.alert_id})
+    METRICS.inc("triage_failures_total")
+    REGISTRY.update(alert.alert_id, status=AlertStatus.FAILED,
+                    attempts=attempts, error=str(exc))
+
+
 def _record_duplicate(alert: SIEMAlert, duplicate: Any, notifier: Any) -> None:
     """Attach a suppressed alert to the one already triaged.
 
@@ -75,10 +119,7 @@ def triage_once(app: Any, alert: SIEMAlert, notifier: Any = None) -> None:
     try:
         out = app.invoke({"alert": alert}, cfg)
     except Exception as exc:  # noqa: BLE001
-        # A crashed triage must be visible, never silently dropped.
-        logger.exception("triage failed", extra={"alert_id": alert.alert_id})
-        METRICS.inc("triage_failures_total")
-        REGISTRY.update(alert.alert_id, status=AlertStatus.FAILED, error=str(exc))
+        _handle_triage_error(alert, exc)
         return
     finally:
         METRICS.observe_latency(time.monotonic() - started)

@@ -37,8 +37,11 @@ CREATE TABLE IF NOT EXISTS aegis_alerts (
     slack_ts          text,
     occurrences       integer NOT NULL DEFAULT 1,
     duplicate_of      text,
-    slack_updated_at  double precision NOT NULL DEFAULT 0
+    slack_updated_at  double precision NOT NULL DEFAULT 0,
+    attempts          integer NOT NULL DEFAULT 0
 );
+-- Added after the table shipped; harmless when it already exists.
+ALTER TABLE aegis_alerts ADD COLUMN IF NOT EXISTS attempts integer NOT NULL DEFAULT 0;
 CREATE INDEX IF NOT EXISTS aegis_alerts_status_idx ON aegis_alerts (status);
 
 CREATE TABLE IF NOT EXISTS aegis_dedupe (
@@ -83,7 +86,7 @@ def _get_pool() -> Any:
 _COLUMNS = (
     "alert_id", "status", "received_at", "verdict", "confidence", "ticket",
     "decision", "error", "slack_ts", "occurrences", "duplicate_of",
-    "slack_updated_at",
+    "slack_updated_at", "attempts",
 )
 
 
@@ -101,6 +104,7 @@ def _to_record(row: dict[str, Any]) -> AlertRecord:
         occurrences=row["occurrences"],
         duplicate_of=row["duplicate_of"],
         slack_updated_at=row["slack_updated_at"],
+        attempts=row.get("attempts", 0),
     )
 
 

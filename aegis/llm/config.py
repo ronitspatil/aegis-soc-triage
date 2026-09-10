@@ -136,6 +136,9 @@ class LLMSettings(BaseSettings):
 
     # Deduplication. The window must be bounded: the same rule firing tomorrow
     # is a new situation, not a repeat of today's.
+    # A transient database or network fault must not lose an alert. Bounded so
+    # a genuinely broken alert cannot loop forever.
+    max_triage_attempts: int = Field(default=3, gt=0)
     dedupe_enabled: bool = True
     dedupe_window_seconds: int = Field(default=900, gt=0)
     # An alert storm would otherwise edit the Slack message once per duplicate

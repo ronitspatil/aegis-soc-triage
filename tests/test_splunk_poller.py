@@ -179,3 +179,68 @@ def test_health_omits_the_database_when_none_is_configured():
     from aegis.ingest import api
 
     assert "database" not in api.healthz()
+
+
+# --- transient fault handling ------------------------------------------------
+
+
+def test_a_dropped_database_connection_is_treated_as_transient():
+    """The pool discards the dead connection and the next attempt succeeds, so
+    failing the alert loses it for no reason."""
+    import psycopg
+
+    from aegis.ingest.worker import is_transient
+
+    assert is_transient(psycopg.OperationalError("terminating connection"))
+
+
+def test_a_programming_error_is_not_transient():
+    from aegis.ingest.worker import is_transient
+
+    assert not is_transient(ValueError("bad field"))
+    assert not is_transient(KeyError("alert"))
+
+
+def test_a_transient_fault_requeues_rather_than_failing_the_alert():
+    import psycopg
+
+    from aegis.ingest.store import REGISTRY, AlertStatus
+    from aegis.ingest.worker import _handle_triage_error
+
+    _drain()
+    alert = _alert("RETRY-1")
+    REGISTRY.create_if_absent("RETRY-1")
+    _handle_triage_error(alert, psycopg.OperationalError("connection closed"))
+
+    rec = REGISTRY.get("RETRY-1")
+    assert rec.status is AlertStatus.QUEUED
+    assert rec.attempts == 1
+    assert _drain() == 1          # back on the queue
+
+
+def test_retries_are_bounded(monkeypatch):
+    """A genuinely broken alert must not loop forever."""
+    import psycopg
+
+    from aegis.ingest.store import REGISTRY, AlertStatus
+    from aegis.ingest.worker import _handle_triage_error
+
+    monkeypatch.setenv("MAX_TRIAGE_ATTEMPTS", "2")
+    _drain()
+    REGISTRY.create_if_absent("RETRY-2")
+    REGISTRY.update("RETRY-2", attempts=1)
+    _handle_triage_error(_alert("RETRY-2"), psycopg.OperationalError("closed"))
+
+    assert REGISTRY.get("RETRY-2").status is AlertStatus.FAILED
+    assert _drain() == 0
+
+
+def test_a_permanent_error_fails_immediately_without_retrying():
+    from aegis.ingest.store import REGISTRY, AlertStatus
+    from aegis.ingest.worker import _handle_triage_error
+
+    _drain()
+    REGISTRY.create_if_absent("PERM-1")
+    _handle_triage_error(_alert("PERM-1"), ValueError("schema mismatch"))
+    assert REGISTRY.get("PERM-1").status is AlertStatus.FAILED
+    assert _drain() == 0
