@@ -10,6 +10,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+from aegis.cli_support import with_friendly_config_errors
 from aegis.decisions import DecisionError, apply_decision, thread_config
 from aegis.graph import _draft_ticket, get_app
 from aegis.ingest.store import REGISTRY
@@ -146,6 +147,7 @@ def check_connection() -> int:
     return 0
 
 
+@with_friendly_config_errors
 def main() -> None:
     """Console entry point. `--check` verifies tokens without connecting."""
     import sys

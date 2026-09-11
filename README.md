@@ -54,6 +54,7 @@ Add a reasoner key to `.env`: either `OPENROUTER_API_KEY` with
 aegis-triage --ip 185.220.101.5 --user j.doe@corp.com --host WIN-FINANCE-07 --severity high
 aegis-simulate                                  # labelled scenarios, accuracy, cost
 python -m aegis.simulation.eval_investigation   # investigation agent evaluation
+aegis-hunt --list                               # scheduled threat hunting
 aegis-slack                                     # Slack approval listener
 uvicorn aegis.ingest.api:app --port 8000        # ingestion API and Splunk poller
 ```
@@ -108,6 +109,8 @@ with `connections:write`, invite the bot to your channel, and run
 | `INVESTIGATOR_ENABLED` | `false` | Tool-calling investigation on escalated alerts |
 | `INVESTIGATION_MAX_TOOL_CALLS` | `10` | Step budget, enforced in code |
 | `LOG_BACKEND` | `mock` | `mock` or `splunk`, for the agent's tools |
+| `HUNTER_ENABLED` | `false` | Scheduled hunting, independent of alerts |
+| `MAX_TRIAGE_ATTEMPTS` | `3` | Requeue on transient faults before failing |
 | `RESPONSE_PLANNER_ENABLED` | `false` | Draft containment actions for approval |
 | `RESPONSE_ACTIONS_ENABLED` | `false` | Let the executor run approved actions |
 | `ACTION_DRY_RUN` | `true` | Log containment instead of performing it |
@@ -116,8 +119,9 @@ with `connections:write`, invite the bot to your channel, and run
 
 Auto-close requires all of: a false positive verdict, confidence above the
 threshold, no failed enrichments, severity at or below the ceiling, no
-privileged identity, and shadow mode off. Containment additionally requires an
-approving human decision, and only targets entities named by the alert.
+privileged identity, no crown-jewel asset, and shadow mode off. Containment
+additionally requires an approving human decision, and only targets entities
+named by the alert.
 
 ## Mock fixtures
 
@@ -130,7 +134,7 @@ integration failure. Full set in `aegis/tools/`.
 ## Development
 
 ```bash
-pytest                      # 209 tests, no network, no credentials
+pytest                      # 247 tests, no network, no credentials
 ruff check aegis tests
 
 # Postgres integration tests, skipped without a database

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from aegis.cli_support import with_friendly_config_errors
 from aegis.graph import AUTO_CLOSE_CONFIDENCE
 from aegis.simulation.runner import Result, run_all, shadow_analysis
 
@@ -23,6 +24,7 @@ def _print_table(results: list[Result]) -> None:
         )
 
 
+@with_friendly_config_errors
 def main() -> None:
     results = run_all()
     _print_table(results)

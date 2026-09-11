@@ -19,6 +19,7 @@ from typing import Any
 from langgraph.types import Command
 from pydantic import ValidationError
 
+from aegis.cli_support import with_friendly_config_errors
 from aegis.graph import build_graph
 from aegis.schemas.alert import SIEMAlert
 
@@ -61,6 +62,7 @@ def _print_ticket(ticket: dict[str, Any]) -> None:
     print("=" * 70)
 
 
+@with_friendly_config_errors
 def main() -> None:
     p = argparse.ArgumentParser(description="Triage a single SIEM alert.")
     p.add_argument("--json", help="Path to a JSON alert payload, or '-' for stdin")

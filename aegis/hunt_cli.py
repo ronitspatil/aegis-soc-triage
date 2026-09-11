@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import argparse
 
+from aegis.cli_support import with_friendly_config_errors
 from aegis.hunter import STANDARD_HYPOTHESES, file_findings, hunt
 from aegis.observability import setup_logging
 
 
+@with_friendly_config_errors
 def main() -> None:
     p = argparse.ArgumentParser(description="Run a threat hunt.")
     p.add_argument("--hypothesis", help="Free-text hypothesis to test")
