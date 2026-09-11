@@ -1,0 +1,37 @@
+# Asset inventory. Copy to assets.yaml, edit, and set in .env:
+#   ASSET_INVENTORY=file
+#   ASSET_INVENTORY_PATH=assets.yaml
+#
+# criticality: crown_jewel | high | standard | low
+# A host not listed here reports as "unknown", which ranks above standard:
+# not knowing what a machine is should not be safer than knowing it is ordinary.
+
+- hostname: DC-01
+  criticality: crown_jewel
+  asset_type: domain_controller
+  environment: production
+  owner: platform@corp.com
+  business_unit: Infrastructure
+  tags: [active-directory, tier-0]
+
+- hostname: SRV-BACKUP-01
+  criticality: high
+  asset_type: server
+  environment: production
+  owner: infra@corp.com
+  business_unit: Infrastructure
+  tags: [backup]
+
+- hostname: WIN-FINANCE-07
+  criticality: standard
+  asset_type: workstation
+  environment: production
+  owner: j.doe@corp.com
+  business_unit: Finance
+
+- hostname: LAB-VM-14
+  criticality: low
+  asset_type: virtual_machine
+  environment: lab
+  owner: research@corp.com
+  tags: [ephemeral]

@@ -36,6 +36,13 @@ class ToolProvider(str, Enum):
     PUBLIC = "public"
 
 
+class AssetInventoryBackend(str, Enum):
+    """Where asset criticality comes from."""
+
+    MOCK = "mock"
+    FILE = "file"
+
+
 class LogBackend(str, Enum):
     """Which SIEM the investigation agent searches. The core pipeline does not
     depend on any of these; only the agent's tools do."""
@@ -190,6 +197,10 @@ class LLMSettings(BaseSettings):
     hunt_max_tool_calls: int = Field(default=12, gt=0)
     # A hunt that floods the queue is worse than one that finds nothing.
     hunt_max_findings: int = Field(default=5, gt=0)
+
+    # --- Asset inventory ---
+    asset_inventory: AssetInventoryBackend = AssetInventoryBackend.MOCK
+    asset_inventory_path: str = "assets.yaml"
 
     # --- Historical log search (investigation agent) ---
     log_backend: LogBackend = LogBackend.MOCK

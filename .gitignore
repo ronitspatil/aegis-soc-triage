@@ -19,3 +19,6 @@ pgdata/
 
 # OS
 .DS_Store
+
+# Local asset inventory (copy from assets.example.yaml)
+assets.yaml

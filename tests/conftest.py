@@ -29,6 +29,7 @@ def _production_safeties_off(monkeypatch):
     monkeypatch.setenv("THREAT_INTEL_PROVIDER", "mock")
     monkeypatch.setenv("ENDPOINT_PROVIDER", "mock")
     monkeypatch.setenv("LOG_BACKEND", "mock")
+    monkeypatch.setenv("ASSET_INVENTORY", "mock")
     monkeypatch.setenv("MCP_ENABLED", "false")
     monkeypatch.setenv("INVESTIGATOR_ENABLED", "false")
     monkeypatch.setenv("RESPONSE_PLANNER_ENABLED", "false")
@@ -47,10 +48,13 @@ def _production_safeties_off(monkeypatch):
     # populated during collection while .env is still in effect. Clearing it
     # around every test keeps the suite from reaching a real database.
     from aegis.ingest.store import reset_stores
+    from aegis.tools.assets import reset_asset_inventory
 
     reset_stores()
+    reset_asset_inventory()
     yield
     reset_stores()
+    reset_asset_inventory()
 
 
 @pytest.fixture

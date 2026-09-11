@@ -85,6 +85,7 @@ when you switch.
 | Slack | `SLACK_BOT_TOKEN` + `SLACK_APP_TOKEN` |
 | AWS, over MCP | `MCP_ENABLED=true` + `AWS_PROFILE`, read-only tools only |
 | Postgres | `POSTGRES_URL`, durable checkpoints, alert registry and dedupe index |
+| Asset inventory | `ASSET_INVENTORY=file` + a YAML or CSV you maintain |
 
 Splunk cannot sign webhook requests, so alerts are ingested by polling a
 detection search: set `SPLUNK_POLLING_ENABLED=true` and `SPLUNK_POLL_SEARCH`.
@@ -110,6 +111,7 @@ with `connections:write`, invite the bot to your channel, and run
 | `INVESTIGATION_MAX_TOOL_CALLS` | `10` | Step budget, enforced in code |
 | `LOG_BACKEND` | `mock` | `mock` or `splunk`, for the agent's tools |
 | `HUNTER_ENABLED` | `false` | Scheduled hunting, independent of alerts |
+| `ASSET_INVENTORY` | `mock` | `mock` or `file`; see `assets.example.yaml` |
 | `MAX_TRIAGE_ATTEMPTS` | `3` | Requeue on transient faults before failing |
 | `RESPONSE_PLANNER_ENABLED` | `false` | Draft containment actions for approval |
 | `RESPONSE_ACTIONS_ENABLED` | `false` | Let the executor run approved actions |

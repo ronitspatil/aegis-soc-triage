@@ -11,6 +11,7 @@ inventory is a gap in the inventory, not evidence that it does not matter.
 from __future__ import annotations
 
 from enum import Enum
+from functools import lru_cache
 from typing import Protocol
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -116,9 +117,26 @@ class MockAssetInventory:
         return AssetProfile(hostname=hostname, criticality=Criticality.UNKNOWN)
 
 
+@lru_cache(maxsize=1)
 def resolve_asset_inventory() -> AssetInventory:
-    """Only a mock exists. A real CMDB implements the same protocol."""
+    """Pick the configured inventory. File-backed is the real one.
+
+    A file that cannot be read raises rather than falling back to the mock:
+    fabricated criticality feeding the auto-close gate is worse than an error.
+    """
+    from aegis.llm.config import AssetInventoryBackend, get_settings
+
+    settings = get_settings()
+    if settings.asset_inventory is AssetInventoryBackend.FILE:
+        from aegis.tools.assets_file import FileAssetInventory
+
+        return FileAssetInventory(settings.asset_inventory_path)
     return MockAssetInventory()
+
+
+def reset_asset_inventory() -> None:
+    """Drop the cached inventory. Needed when configuration changes."""
+    resolve_asset_inventory.cache_clear()
 
 
 def lookup_asset(hostname: str) -> AssetProfile:
