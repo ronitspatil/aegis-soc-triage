@@ -83,3 +83,14 @@ def lookup_user(username: str) -> UserProfile | None:
     if username == RAISE_ON_LOOKUP:
         raise IdentityProviderUnavailable(f"503 from IdP on lookup of {username}")
     return _DIRECTORY.get(username)
+
+
+def resolve_user(username: str) -> UserProfile | None:
+    """Provider-aware entry point. Switching mock to live is an env var."""
+    from aegis.llm.config import ToolProvider, get_settings
+
+    if get_settings().identity_provider is ToolProvider.LIVE:
+        from aegis.tools.keycloak_client import lookup_user_live
+
+        return lookup_user_live(username)
+    return lookup_user(username)

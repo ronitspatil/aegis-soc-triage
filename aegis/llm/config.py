@@ -103,7 +103,15 @@ class LLMSettings(BaseSettings):
     # --- Security tool backends ---
     threat_intel_provider: ToolProvider = ToolProvider.MOCK
     endpoint_provider: ToolProvider = ToolProvider.MOCK
+    identity_provider: ToolProvider = ToolProvider.MOCK
     virustotal_api_key: str | None = None
+
+    # Keycloak. Admin credentials suit a local realm; a deployment should use a
+    # service account client with the realm-management view roles.
+    keycloak_url: str | None = None
+    keycloak_realm: str = "aegis"
+    keycloak_admin_user: str | None = None
+    keycloak_admin_password: str | None = None
 
     # CrowdStrike Falcon. The base URL is region specific; the wrong region
     # fails authentication in a way that looks like bad credentials.

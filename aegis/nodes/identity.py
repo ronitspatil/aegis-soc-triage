@@ -15,7 +15,7 @@ from aegis.schemas.state import EnrichmentData, SOCAgentState
 from aegis.tools.identity import (
     IdentityProviderUnavailable,
     UserProfile,
-    lookup_user,
+    resolve_user,
 )
 
 logger = logging.getLogger(__name__)
@@ -104,7 +104,7 @@ def identity_node(state: SOCAgentState) -> dict:
         }
 
     try:
-        profile = lookup_user(alert.username)
+        profile = resolve_user(alert.username)
     except IdentityProviderUnavailable as exc:
         return {
             "enrichments": [

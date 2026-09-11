@@ -86,6 +86,7 @@ when you switch.
 | AWS, over MCP | `MCP_ENABLED=true` + `AWS_PROFILE`, read-only tools only |
 | Postgres | `POSTGRES_URL`, durable checkpoints, alert registry and dedupe index |
 | Asset inventory | `ASSET_INVENTORY=file` + a YAML or CSV you maintain |
+| Keycloak (identity) | `IDENTITY_PROVIDER=live` + `KEYCLOAK_URL`, realm admin |
 
 Splunk cannot sign webhook requests, so alerts are ingested by polling a
 detection search: set `SPLUNK_POLLING_ENABLED=true` and `SPLUNK_POLL_SEARCH`.
@@ -112,6 +113,7 @@ with `connections:write`, invite the bot to your channel, and run
 | `LOG_BACKEND` | `mock` | `mock` or `splunk`, for the agent's tools |
 | `HUNTER_ENABLED` | `false` | Scheduled hunting, independent of alerts |
 | `ASSET_INVENTORY` | `mock` | `mock` or `file`; see `assets.example.yaml` |
+| `IDENTITY_PROVIDER` | `mock` | `mock` or `live` (Keycloak) |
 | `MAX_TRIAGE_ATTEMPTS` | `3` | Requeue on transient faults before failing |
 | `RESPONSE_PLANNER_ENABLED` | `false` | Draft containment actions for approval |
 | `RESPONSE_ACTIONS_ENABLED` | `false` | Let the executor run approved actions |
@@ -136,7 +138,7 @@ integration failure. Full set in `aegis/tools/`.
 ## Development
 
 ```bash
-pytest                      # 247 tests, no network, no credentials
+pytest                      # 273 tests, no network, no credentials
 ruff check aegis tests
 
 # Postgres integration tests, skipped without a database

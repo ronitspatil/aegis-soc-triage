@@ -24,10 +24,12 @@ def _production_safeties_off(monkeypatch):
     # POSTGRES_URL included: the suite must never touch a real database.
     for var in ("SLACK_BOT_TOKEN", "SLACK_APP_TOKEN", "VIRUSTOTAL_API_KEY",
                 "SPLUNK_TOKEN", "POSTGRES_URL",
-                "CROWDSTRIKE_CLIENT_ID", "CROWDSTRIKE_CLIENT_SECRET"):
+                "CROWDSTRIKE_CLIENT_ID", "CROWDSTRIKE_CLIENT_SECRET",
+                "KEYCLOAK_URL", "KEYCLOAK_ADMIN_PASSWORD"):
         monkeypatch.setenv(var, "")
     monkeypatch.setenv("THREAT_INTEL_PROVIDER", "mock")
     monkeypatch.setenv("ENDPOINT_PROVIDER", "mock")
+    monkeypatch.setenv("IDENTITY_PROVIDER", "mock")
     monkeypatch.setenv("LOG_BACKEND", "mock")
     monkeypatch.setenv("ASSET_INVENTORY", "mock")
     monkeypatch.setenv("MCP_ENABLED", "false")
