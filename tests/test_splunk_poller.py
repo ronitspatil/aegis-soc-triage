@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
+import pytest
+
 from aegis.ingest.splunk_poller import poll_once
 from aegis.ingest.splunk_source import IngestResult
 from aegis.ingest.store import ALERT_QUEUE, REGISTRY
@@ -244,3 +246,51 @@ def test_a_permanent_error_fails_immediately_without_retrying():
     _handle_triage_error(_alert("PERM-1"), ValueError("schema mismatch"))
     assert REGISTRY.get("PERM-1").status is AlertStatus.FAILED
     assert _drain() == 0
+
+
+def test_the_worker_survives_an_error_its_own_handler_cannot_absorb(monkeypatch):
+    """triage_once handles its own failures, so an exception reaching the loop
+    means the handling failed. Letting it propagate kills the thread and every
+    later alert queues forever."""
+    import threading
+
+    from aegis.ingest import worker as worker_mod
+    from aegis.ingest.store import ALERT_QUEUE, REGISTRY, AlertStatus
+
+    _drain()
+    monkeypatch.setattr(worker_mod, "get_app", lambda: object())
+
+    def boom(app, alert, notifier=None):
+        raise RuntimeError("registry write failed")
+
+    monkeypatch.setattr(worker_mod, "triage_once", boom)
+
+    REGISTRY.create_if_absent("BOOM-1")
+    ALERT_QUEUE.put(_alert("BOOM-1"))
+    stop = threading.Event()
+    thread = threading.Thread(target=worker_mod.worker_loop, args=(stop,), daemon=True)
+    thread.start()
+    ALERT_QUEUE.join()          # the worker processed it rather than dying
+
+    REGISTRY.create_if_absent("BOOM-2")
+    ALERT_QUEUE.put(_alert("BOOM-2"))
+    ALERT_QUEUE.join()          # and it is still alive for the next one
+    stop.set()
+    thread.join(timeout=5)
+
+    assert REGISTRY.get("BOOM-1").status is AlertStatus.FAILED
+    assert REGISTRY.get("BOOM-2").status is AlertStatus.FAILED
+
+
+def test_a_non_utf8_database_is_refused(monkeypatch):
+    """A SQL_ASCII database works until the first em dash a model writes."""
+    from aegis.ingest.store_pg import _require_utf8
+
+    class Conn:
+        def __init__(self, enc): self.enc = enc
+        def execute(self, sql):
+            return type("R", (), {"fetchone": lambda _self: {"server_encoding": self.enc}})()
+
+    _require_utf8(Conn("UTF8"))          # accepted
+    with pytest.raises(RuntimeError, match="SQL_ASCII"):
+        _require_utf8(Conn("SQL_ASCII"))

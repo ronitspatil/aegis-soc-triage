@@ -171,6 +171,19 @@ def worker_loop(stop: threading.Event) -> None:
             continue
         try:
             triage_once(app, alert)
+        except Exception as exc:  # noqa: BLE001
+            # triage_once handles its own failures, so reaching here means the
+            # handling itself failed. Letting it propagate kills the worker
+            # thread and every later alert queues forever, which is a far worse
+            # outcome than losing one alert.
+            logger.exception("worker caught an unhandled error",
+                             extra={"alert_id": alert.alert_id})
+            METRICS.inc("worker_unhandled_errors_total")
+            try:
+                REGISTRY.update(alert.alert_id, status=AlertStatus.FAILED,
+                                error=f"unhandled: {exc}")
+            except Exception:  # noqa: BLE001 - the registry may be the thing failing
+                logger.error("could not record the failure for %s", alert.alert_id)
         finally:
             ALERT_QUEUE.task_done()
     logger.info("triage worker stopped")

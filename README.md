@@ -84,7 +84,7 @@ when you switch.
 | Splunk | `SPLUNK_URL` + `SPLUNK_TOKEN` |
 | Slack | `SLACK_BOT_TOKEN` + `SLACK_APP_TOKEN` |
 | AWS, over MCP | `MCP_ENABLED=true` + `AWS_PROFILE`, read-only tools only |
-| Postgres | `POSTGRES_URL`, durable checkpoints, alert registry and dedupe index |
+| Postgres | `POSTGRES_URL`, durable checkpoints, alert registry and dedupe index. Must be UTF8 |
 | Asset inventory | `ASSET_INVENTORY=file` + a YAML or CSV you maintain |
 | Keycloak (identity) | `IDENTITY_PROVIDER=live` + `KEYCLOAK_URL`, realm admin |
 
@@ -138,7 +138,7 @@ integration failure. Full set in `aegis/tools/`.
 ## Development
 
 ```bash
-pytest                      # 273 tests, no network, no credentials
+pytest                      # 275 tests, no network, no credentials
 ruff check aegis tests
 
 # Postgres integration tests, skipped without a database

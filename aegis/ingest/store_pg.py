@@ -78,9 +78,28 @@ def _get_pool() -> Any:
                         "connect_timeout": int(settings.postgres_connect_timeout)},
             )
             with _pool.connection() as conn:
+                _require_utf8(conn)
                 conn.execute(SCHEMA)
             logger.info("alert registry and dedupe index using postgres")
     return _pool
+
+
+def _require_utf8(conn: Any) -> None:
+    """Refuse a database that cannot store non-ASCII text.
+
+    Model output routinely contains characters outside ASCII, so a SQL_ASCII
+    database works until the first em dash and then fails a write mid-triage.
+    Checking once at startup turns a recurring mystery into one clear message.
+    """
+    row = conn.execute("SHOW server_encoding").fetchone()
+    encoding = str((row or {}).get("server_encoding", "")).upper()
+    if encoding not in {"UTF8", "UTF-8"}:
+        raise RuntimeError(
+            f"the database encoding is {encoding or 'unknown'}, which cannot store "
+            "the non-ASCII characters models produce. Create one with: "
+            "CREATE DATABASE aegis WITH ENCODING 'UTF8' TEMPLATE template0 "
+            "LC_COLLATE='C' LC_CTYPE='C';"
+        )
 
 
 _COLUMNS = (
