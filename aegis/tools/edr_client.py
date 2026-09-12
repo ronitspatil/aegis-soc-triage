@@ -211,12 +211,16 @@ def get_host_telemetry_live(hostname: str) -> HostTelemetry | None:
         )
 
     status = str(device.get("status", "")).lower()
+    # Falcon reports this as the string "no" or "yes", not a boolean, so a
+    # truthiness check marks every healthy sensor as degraded. Anything that
+    # is not an explicit "no" counts against the host: a sensor in reduced
+    # functionality mode is a blind spot, and the scorer treats that as added
+    # risk rather than a clean result.
+    rfm = str(device.get("reduced_functionality_mode", "")).strip().lower()
     return HostTelemetry(
         hostname=device.get("hostname") or hostname,
         os=device.get("os_version") or device.get("platform_name") or "unknown",
-        # A sensor in reduced functionality mode is a blind spot, and the
-        # scorer treats that as added risk rather than a clean result.
-        edr_agent_healthy=not device.get("reduced_functionality_mode")
+        edr_agent_healthy=rfm in {"", "no", "false"}
         and status not in {"", "unknown"},
         is_isolated=status == "contained",
         recent_processes=processes,

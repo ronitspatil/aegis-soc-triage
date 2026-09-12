@@ -138,6 +138,14 @@ def test_reduced_functionality_mode_counts_as_an_unhealthy_sensor(monkeypatch):
     assert tel.edr_agent_healthy is False
 
 
+def test_a_sensor_reporting_no_rfm_is_healthy(monkeypatch):
+    """Falcon sends the string "no", which is truthy: a live tenant caught this."""
+    install(monkeypatch, _handler(device={
+        "hostname": "numbat", "os_version": "Ubuntu 26.04",
+        "status": "normal", "reduced_functionality_mode": "no"}))
+    assert edr.get_host_telemetry_live("numbat").edr_agent_healthy is True
+
+
 def test_contained_host_is_reported_as_isolated(monkeypatch):
     install(monkeypatch, _handler(device={
         "hostname": "H", "os_version": "Windows 11", "status": "contained"}))
